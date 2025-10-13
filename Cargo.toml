@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitflags = "2.9.4"
 hex = "0.4.3"
+serialport = "4.0"

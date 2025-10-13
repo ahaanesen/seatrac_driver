@@ -11,6 +11,8 @@
 // those identifier names here so the Rust types map directly to the documented
 // constants and enums. The variant names remain uppercase to match the spec.
 
+#![allow(non_camel_case_types)]
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AMSGTYPE_E { // Acoustic Message Type
     MSG_OWAY = 0x0,
@@ -63,7 +65,7 @@ impl APAYLOAD_E {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BAUDRATE_E { // Serial Port Baud Rate
     BAUD_4800 = 0x07,
     BAUD_9600 = 0x08,
@@ -87,9 +89,21 @@ impl BAUDRATE_E {
             _ => None,
         }
     }
+
+    pub fn to_u8(&self) -> u8 {
+        match *self {
+            BAUDRATE_E::BAUD_4800 => 0x07,
+            BAUDRATE_E::BAUD_9600 => 0x08,
+            BAUDRATE_E::BAUD_14400 => 0x09,
+            BAUDRATE_E::BAUD_19200 => 0x0A,
+            BAUDRATE_E::BAUD_38400 => 0x0B,
+            BAUDRATE_E::BAUD_57600 => 0x0C,
+            BAUDRATE_E::BAUD_115200 => 0x0D,
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BID_E { // Beacon Identification Code
     BEACON_ALL = 0x0,
     BEACON_ID_1 = 0x1,
@@ -129,6 +143,27 @@ impl BID_E {
             0xE => Some(BID_E::BEACON_ID_14),
             0xF => Some(BID_E::BEACON_ID_15),
             _ => None,
+        }
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        match *self {
+            BID_E::BEACON_ALL => 0x0,
+            BID_E::BEACON_ID_1 => 0x1,
+            BID_E::BEACON_ID_2 => 0x2,
+            BID_E::BEACON_ID_3 => 0x3,
+            BID_E::BEACON_ID_4 => 0x4,
+            BID_E::BEACON_ID_5 => 0x5,
+            BID_E::BEACON_ID_6 => 0x6,
+            BID_E::BEACON_ID_7 => 0x7,
+            BID_E::BEACON_ID_8 => 0x8,
+            BID_E::BEACON_ID_9 => 0x9,
+            BID_E::BEACON_ID_10 => 0xA,
+            BID_E::BEACON_ID_11 => 0xB,
+            BID_E::BEACON_ID_12 => 0xC,
+            BID_E::BEACON_ID_13 => 0xD,
+            BID_E::BEACON_ID_14 => 0xE,
+            BID_E::BEACON_ID_15 => 0xF,
         }
     }
 }
@@ -279,6 +314,67 @@ impl CID_E {
             0x81 => Some(CID_E::CID_CFG_BEACON_SET),
             0x82 => Some(CID_E::CID_CFG_BEACON_RESP),
             _ => None,
+        }
+    }
+
+    /// Convert this CID_E variant to its numeric u8 code.
+    pub fn to_u8(&self) -> u8 {
+        match *self {
+            CID_E::CID_SYS_ALIVE => 0x01,
+            CID_E::CID_SYS_INFO => 0x02,
+            CID_E::CID_SYS_REBOOT => 0x03,
+            CID_E::CID_SYS_ENGINEERING => 0x04,
+            CID_E::CID_PROG_INIT => 0x0D,
+            CID_E::CID_PROG_BLOCK => 0x0E,
+            CID_E::CID_PROG_UPDATE => 0x0F,
+            CID_E::CID_STATUS => 0x10,
+            CID_E::CID_STATUS_CFG_GET => 0x11,
+            CID_E::CID_STATUS_CFG_SET => 0x12,
+            CID_E::CID_SETTINGS_GET => 0x15,
+            CID_E::CID_SETTINGS_SET => 0x16,
+            CID_E::CID_SETTINGS_LOAD => 0x17,
+            CID_E::CID_SETTINGS_SAVE => 0x18,
+            CID_E::CID_SETTINGS_RESET => 0x19,
+            CID_E::CID_CAL_ACTION => 0x20,
+            CID_E::CID_AHRS_CAL_GET => 0x21,
+            CID_E::CID_AHRS_CAL_SET => 0x22,
+            CID_E::CID_XCVR_ANALYSE => 0x30,
+            CID_E::CID_XCVR_TX_MSG => 0x31,
+            CID_E::CID_XCVR_RX_ERR => 0x32,
+            CID_E::CID_XCVR_RX_MSG => 0x33,
+            CID_E::CID_XCVR_RX_REQ => 0x34,
+            CID_E::CID_XCVR_RX_RESP => 0x35,
+            CID_E::CID_XCVR_RX_UNHANDLED => 0x37,
+            CID_E::CID_XCVR_USBL => 0x38,
+            CID_E::CID_XCVR_FIX => 0x39,
+            CID_E::CID_XCVR_STATUS => 0x3A,
+            CID_E::CID_XCVR_TX_MSGCTRL_SET => 0x3B,
+            CID_E::CID_PING_SEND => 0x40,
+            CID_E::CID_PING_REQ => 0x41,
+            CID_E::CID_PING_RESP => 0x42,
+            CID_E::CID_PING_ERROR => 0x43,
+            CID_E::CID_ECHO_SEND => 0x48,
+            CID_E::CID_ECHO_REQ => 0x49,
+            CID_E::CID_ECHO_RESP => 0x4A,
+            CID_E::CID_ECHO_ERROR => 0x4B,
+            CID_E::CID_NAV_QUERY_SEND => 0x50,
+            CID_E::CID_NAV_QUERY_REQ => 0x51,
+            CID_E::CID_NAV_QUERY_RESP => 0x52,
+            CID_E::CID_NAV_ERROR => 0x53,
+            CID_E::CID_NAV_QUEUE_SET => 0x58,
+            CID_E::CID_NAV_QUEUE_CLR => 0x59,
+            CID_E::CID_NAV_QUEUE_STATUS => 0x5A,
+            CID_E::CID_NAV_STATUS_SEND => 0x5B,
+            CID_E::CID_NAV_STATUS_RECEIVE => 0x5C,
+            CID_E::CID_DAT_SEND => 0x60,
+            CID_E::CID_DAT_RECEIVE => 0x61,
+            CID_E::CID_DAT_ERROR => 0x63,
+            CID_E::CID_DAT_QUEUE_SET => 0x64,
+            CID_E::CID_DAT_QUEUE_CLR => 0x65,
+            CID_E::CID_DAT_QUEUE_STATUS => 0x66,
+            CID_E::CID_CFG_BEACON_GET => 0x80,
+            CID_E::CID_CFG_BEACON_SET => 0x81,
+            CID_E::CID_CFG_BEACON_RESP => 0x82,
         }
     }
 }
