@@ -101,6 +101,18 @@ impl BAUDRATE_E {
             BAUDRATE_E::BAUD_115200 => 0x0D,
         }
     }
+    pub fn from_u32(value: u32) -> Option<Self> {
+        match value {
+            4800 => Some(BAUDRATE_E::BAUD_4800),
+            9600 => Some(BAUDRATE_E::BAUD_9600),
+            14400 => Some(BAUDRATE_E::BAUD_14400),
+            19200 => Some(BAUDRATE_E::BAUD_19200),
+            38400 => Some(BAUDRATE_E::BAUD_38400),
+            57600 => Some(BAUDRATE_E::BAUD_57600),
+            115200 => Some(BAUDRATE_E::BAUD_115200),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -379,6 +391,7 @@ impl CID_E {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CST_E { // Command Status Codes
     CST_OK = 0x00,
     CST_FAIL = 0x01,
@@ -414,6 +427,10 @@ pub enum CST_E { // Command Status Codes
     CST_DEX_RESP_TMO_ERROR = 0x76,
     CST_DEX_RESP_MSG_ERROR = 0x77,
     CST_DEX_RESP_REMOTE_ERROR = 0x78,
+    CST_CFG_RESP_NOT_ALLOWED = 0x80,
+    CST_CFG_ALREADY_LOCKED = 0x81,
+    CST_CFG_NOT_LOCKED = 0x82,
+    CST_INTERRUPT_LOCKED = 0xB0
 }
 
 impl CST_E {
@@ -453,11 +470,59 @@ impl CST_E {
             CST_E::CST_DEX_RESP_TMO_ERROR => 0x76,
             CST_E::CST_DEX_RESP_MSG_ERROR => 0x77,
             CST_E::CST_DEX_RESP_REMOTE_ERROR => 0x78,
+            CST_E::CST_CFG_RESP_NOT_ALLOWED => 0x80,
+            CST_E::CST_CFG_ALREADY_LOCKED => 0x81,
+            CST_E::CST_CFG_NOT_LOCKED => 0x82,
+            CST_E::CST_INTERRUPT_LOCKED => 0xB0,
+        }
+    }
+
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0x00 => Some(CST_E::CST_OK),
+            0x01 => Some(CST_E::CST_FAIL),
+            0x03 => Some(CST_E::CST_EEPROM_ERROR),
+            0x04 => Some(CST_E::CST_CMD_PARAM_MISSING),
+            0x05 => Some(CST_E::CST_CMD_PARAM_INVALID),
+            0x0A => Some(CST_E::CST_PROG_FLASH_ERROR),
+            0x0B => Some(CST_E::CST_PROG_FIRMWARE_ERROR),
+            0x0C => Some(CST_E::CST_PROG_SECTION_ERROR),
+            0x0D => Some(CST_E::CST_PROG_LENGTH_ERROR),
+            0x0E => Some(CST_E::CST_PROG_DATA_ERROR),
+            0x0F => Some(CST_E::CST_PROG_CHECKSUM_ERROR),
+            0x30 => Some(CST_E::CST_XCVR_BUSY),
+            0x31 => Some(CST_E::CST_XCVR_ID_REJECTED),
+            0x32 => Some(CST_E::CST_XCVR_CSUM_ERROR),
+            0x33 => Some(CST_E::CST_XCVR_LENGTH_ERROR),
+            0x34 => Some(CST_E::CST_XCVR_RESP_TIMEOUT),
+            0x35 => Some(CST_E::CST_XCVR_RESP_ERROR),
+            0x36 => Some(CST_E::CST_XCVR_RESP_WRONG),
+            0x37 => Some(CST_E::CST_XCVR_PLOAD_ERROR),
+            0x3A => Some(CST_E::CST_XCVR_STATE_STOPPED),
+            0x3B => Some(CST_E::CST_XCVR_STATE_IDLE),
+            0x3C => Some(CST_E::CST_XCVR_STATE_TX),
+            0x3D => Some(CST_E::CST_XCVR_STATE_REQ),
+            0x3E => Some(CST_E::CST_XCVR_STATE_RX),
+            0x3F => Some(CST_E::CST_XCVR_STATE_RESP),
+            0x70 => Some(CST_E::CST_DEX_SOCKET_ERROR),
+            0x71 => Some(CST_E::CST_DEX_RX_SYNC),
+            0x72 => Some(CST_E::CST_DEX_RX_DATA),
+            0x73 => Some(CST_E::CST_DEX_RX_SEQ_ERROR),
+            0x74 => Some(CST_E::CST_DEX_RX_MSG_ERROR),
+            0x75 => Some(CST_E::CST_DEX_REQ_ERROR),
+            0x76 => Some(CST_E::CST_DEX_RESP_TMO_ERROR),
+            0x77 => Some(CST_E::CST_DEX_RESP_MSG_ERROR),
+            0x78 => Some(CST_E::CST_DEX_RESP_REMOTE_ERROR),
+            0x80 => Some(CST_E::CST_CFG_RESP_NOT_ALLOWED),
+            0x81 => Some(CST_E::CST_CFG_ALREADY_LOCKED),
+            0x82 => Some(CST_E::CST_CFG_NOT_LOCKED),
+            0xB0 => Some(CST_E::CST_INTERRUPT_LOCKED),
+            _ => None,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum STATUSMODE_E { // Status Output Mode
     STATUS_MODE_MANUAL = 0x0,
     STATUS_MODE_1HZ = 0x1,
@@ -478,9 +543,23 @@ impl STATUSMODE_E {
             STATUSMODE_E::STATUS_MODE_25HZ => 0x5,
         }
     }
+
+    /// Convert a raw 3-bit value (bits[2:0]) into the corresponding STATUSMODE_E
+    /// Returns None for values that are not defined in the spec.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value & 0x07 {
+            0x0 => Some(STATUSMODE_E::STATUS_MODE_MANUAL),
+            0x1 => Some(STATUSMODE_E::STATUS_MODE_1HZ),
+            0x2 => Some(STATUSMODE_E::STATUS_MODE_2HZ5),
+            0x3 => Some(STATUSMODE_E::STATUS_MODE_5HZ),
+            0x4 => Some(STATUSMODE_E::STATUS_MODE_10HZ),
+            0x5 => Some(STATUSMODE_E::STATUS_MODE_25HZ),
+            _ => None,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XCVR_TXMSGCTRL_E { // Transmit Message Control
     XCVR_TXMSG_ALLOW_ALL = 0x0,
     XCVR_TXMSG_BLOCK_RESP = 0x1,

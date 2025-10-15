@@ -144,7 +144,7 @@ impl ACOFIX_T {
 /// 
 
 // AHRSCAL_T goes here
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AHRSCAL_T { // AHRS Calibration Coefficients
     // Accelerometer calibration values
     pub acc_min_x: i16,
@@ -222,6 +222,7 @@ impl DAT_RECEIVE{
         };
         dat_send_str
     }
+    
 }
 
 pub fn u8_to_bool(v: u8)->bool{
@@ -239,7 +240,7 @@ impl SETTINGS_T {
     /// The function reads fields in the order declared in the struct and expects
     /// little-endian encoding for mrror if the buffer is too short or if any
     /// enum conversion fails.
-    pub fn from_bytes(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_hex(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
         use std::convert::TryInto;
 
         let buf = data.as_slice();
@@ -285,6 +286,12 @@ impl SETTINGS_T {
 
         // Start parsing fields in order
         let status_flags = read_u8(buf, &mut i)?;
+        // Bits[2:0] = STATUS_MODE; Bits[7:3] reserved
+        let status_mode_raw = status_flags & 0x07;
+        let status_mode = match enums::STATUSMODE_E::from_u8(status_mode_raw) {
+            Some(m) => m,
+            None => return Err(format!("unknown STATUSMODE_E code {:#x}", status_mode_raw).into()),
+        };
         let status_output_raw = read_u8(buf, &mut i)?;
         let status_output = STATUS_BITS_T::from_bits_truncate(status_output_raw);
 
@@ -380,6 +387,7 @@ impl SETTINGS_T {
 
         Ok(SETTINGS_T {
             status_flags,
+            status_mode,
             status_output,
             uart_main_baud,
             uart_aux_baud,
@@ -414,7 +422,10 @@ impl SETTINGS_T {
     /// Serialize SETTINGS_T into a Vec<u8> using the same layout as from_bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut v: Vec<u8> = Vec::new();
-        v.push(self.status_flags);
+        // Merge status_mode into the low 3 bits of status_flags when serializing.
+        let mut status_flags_out = self.status_flags & 0xF8; // preserve reserved upper bits
+        status_flags_out |= self.status_mode.to_u8() & 0x07;
+        v.push(status_flags_out);
         v.push(self.status_output.bits());
         v.push(self.uart_main_baud.to_u8());
         v.push(self.uart_aux_baud.to_u8());
@@ -469,9 +480,10 @@ impl SETTINGS_T {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SETTINGS_T {
     pub status_flags: u8,                // STATUS_FLAGS
+    pub status_mode: enums::STATUSMODE_E, // STATUS_MODE (bits[2:0] of status_flags)
     pub status_output: STATUS_BITS_T,    // STATUS_OUTPUT
     pub uart_main_baud: BAUDRATE_E,      // UART_MAIN_BAUD - only applied after reboot
     pub uart_aux_baud: BAUDRATE_E,       // UART_AUX_BAUD (reserved) - only applied after reboot
@@ -510,7 +522,7 @@ pub struct SETTINGS_T {
     pub xcvr_posflt_tmo: u8,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MACADDR_T {
     pub addr: u64,
 }
@@ -542,7 +554,7 @@ impl MACADDR_T {
 }
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IPADDR_T {
     pub addr: u32,
 }

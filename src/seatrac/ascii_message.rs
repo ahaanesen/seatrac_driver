@@ -5,6 +5,7 @@
 use crate::seatrac::enums::{self}; // Replace with actual path
 use hex;
 use std::error::Error;
+use std::io;
 
 
 const CRC_POLY: u16 = 0xA001; // CRC polynomial for checksum calculation
@@ -61,32 +62,56 @@ pub fn make_command_message(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
 
 
 /// Parse ASCII response message
-pub fn parse_response_message(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16), Box<dyn Error>> {
-    // Check start byte and length
-    if msg.len() < 9 || msg[0] != b'$' {
-        return Err("Invalid message format".into());
+/// # Arguments
+/// * `msg` - The byte slice containing the ASCII response message
+/// # Returns
+/// * A tuple containing the command ID, the hex encoded payload, checksum, and the binary representation of the message
+/// * An error if the message format is invalid or checksum does not match
+pub fn parse_response_message(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16, Vec<u8>), Box<dyn Error>> {
+    // Basic validation
+    if msg.len() < 8 || msg[0] != b'$' {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Invalid response format")));
     }
-    // Find <CR><LF>
-    if msg[msg.len()-2] != b'\r' || msg[msg.len()-1] != b'\n' {
-        return Err("Missing CRLF".into());
+
+    // The message payload (hex) is everything after the '$' up to the last 4 ASCII hex chars
+    // which represent the checksum. This mirrors the reference implementation provided.
+    let hex_str = &msg[1..msg.len() - 4];
+    if hex_str.len() % 2 != 0 {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "OddLength")));
     }
-    // CID: 2 chars after $
-    let cid = enums::CID_E::from_u8(u8::from_str_radix(std::str::from_utf8(&msg[1..3])?, 16)?)
-        .ok_or("Unknown CID")?;
-    // Payload: from index 3 to len-6 (excluding CSUM and CRLF)
-    let payload_hex = &msg[3..msg.len()-6];
-    let payload = hex::decode(payload_hex)?;
-    // CSUM: last 4 chars before CRLF
-    let csum_str = &msg[msg.len()-6..msg.len()-2];
-    let csum = u16::from_str_radix(std::str::from_utf8(csum_str)?, 16)?;
-    // Check CRC
-    let content_bytes = &msg[1..msg.len()-6];
-    let computed_crc = calc_crc16(content_bytes);
-    if computed_crc != csum {
-        return Err("Checksum mismatch".into());
+
+    // Decode the ASCII hex into binary bytes
+    let byte_repr = hex::decode(hex_str)?;
+    if byte_repr.is_empty() {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Empty payload")));
     }
-    Ok((cid, payload, csum))
+
+    // First byte of decoded bytes is the CID
+    let cid = enums::CID_E::from_u8(byte_repr[0]).ok_or_else(|| {
+        Box::new(io::Error::new(io::ErrorKind::InvalidData, "Unknown CID")) as Box<dyn Error>
+    })?;
+
+    // Payload is the remaining bytes
+    let payload = if byte_repr.len() > 1 { byte_repr[1..].to_vec() } else { Vec::new() };
+
+    // Compute CRC over the binary bytes
+    let computed_checksum = calc_crc16(&byte_repr);
+
+    // Received checksum is the last 4 ASCII hex chars of the message
+    let received_checksum_bytes = hex::decode(&msg[msg.len() - 4..msg.len()])?;
+    if received_checksum_bytes.len() != 2 {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Bad checksum length")));
+    }
+    let received_checksum = u16::from_le_bytes([received_checksum_bytes[0], received_checksum_bytes[1]]);
+
+    if computed_checksum != received_checksum {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Checksum mismatch")));
+    }
+
+    Ok((cid, payload, received_checksum, byte_repr))
 }
+
+
 
 /* pub trait SeaTracCommand {
     fn cid(&self) -> CID_E;
