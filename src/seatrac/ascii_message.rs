@@ -6,6 +6,7 @@ use crate::seatrac::enums::{self}; // Replace with actual path
 use hex;
 use std::error::Error;
 use std::io;
+use crate::seatrac::structs::{SETTINGS_T, XCVR_USBL, XCVR_BASELINES};
 
 
 const CRC_POLY: u16 = 0xA001; // CRC polynomial for checksum calculation
@@ -38,7 +39,7 @@ fn calc_crc16(buf: &[u8]) -> u16 {
 
 // From 5.2 Message Format
 /// Create ASCII command message
-pub fn make_command_message(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
+pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
     // CID as two ASCII hex chars
     let cid_str = format!("{:02X}", cid.to_u8());
     // Encode payload as hex
@@ -58,8 +59,42 @@ pub fn make_command_message(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
     msg.push(b'\n');
     msg
 }
-
-
+pub fn make_command_u16(cid: enums::CID_E, payload: u16) -> Vec<u8> {
+    let cid_str = format!("{:02X}", cid.to_u8());
+    let payload_hex = hex::encode(payload.to_le_bytes());
+    let content = format!("{}{}", cid_str, payload_hex);
+    let content_bytes = content.as_bytes();
+    let checksum = calc_crc16(content_bytes);
+    let checksum_str = format!("{:04X}", checksum); // 4 chars ASCII hex
+    let mut msg = Vec::new();
+    msg.push(b'#');
+    msg.extend_from_slice(content_bytes);
+    msg.extend_from_slice(checksum_str.as_bytes());
+    msg.extend_from_slice(b"\r\n");
+    msg
+}
+// TODO: check if this third option can work instead of both of the two above
+/* pub fn make_command_message(cid: enums::CID_E, payload: impl AsRef<[u8]>) -> Vec<u8> {
+    // CID as two ASCII hex chars
+    let cid_str = format!("{:02X}", cid.to_u8());
+    // Encode payload as hex
+    let payload_bytes = payload.as_ref();
+    let payload_hex = hex::encode(payload_bytes);
+    // Build message without checksum/delimiters
+    let content = format!("{}{}", cid_str, payload_hex);
+    // ASCII bytes (for CRC calculation)
+    let content_bytes = content.as_bytes();
+    let checksum = calc_crc16(content_bytes);
+    let checksum_str = format!("{:04X}", checksum); // 4 chars ASCII hex
+    // Full message: #CIDPayloadCSUM<CR><LF>
+    let mut msg = Vec::new();
+    msg.push(b'#');
+    msg.extend_from_slice(content_bytes);
+    msg.extend_from_slice(checksum_str.as_bytes());
+    msg.push(b'\r');
+    msg.push(b'\n');
+    msg
+} */
 
 /// Parse ASCII response message
 /// # Arguments
@@ -67,7 +102,7 @@ pub fn make_command_message(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
 /// # Returns
 /// * A tuple containing the command ID, the hex encoded payload, checksum, and the binary representation of the message
 /// * An error if the message format is invalid or checksum does not match
-pub fn parse_response_message(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16, Vec<u8>), Box<dyn Error>> {
+pub fn parse_response(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16), Box<dyn Error>> {
     // Basic validation
     if msg.len() < 8 || msg[0] != b'$' {
         return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Invalid response format")));
@@ -108,7 +143,54 @@ pub fn parse_response_message(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16,
         return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Checksum mismatch")));
     }
 
-    Ok((cid, payload, received_checksum, byte_repr))
+    Ok((cid, payload, received_checksum))
+}
+
+/// Typed representation of decoded SeaTrac messages.
+/// Use `parse_and_decode_message` to obtain this from an ASCII response buffer.
+#[derive(Debug)]
+pub enum SeaTracMessage {
+    Settings(SETTINGS_T),
+    XcvrUsbl(XCVR_USBL),
+    XcvrBaselines(XCVR_BASELINES),
+    DatReceive(Vec<u8>), // payload left raw for DAT messages (parsing varies)
+    Raw(enums::CID_E, Vec<u8>),
+}
+
+/// Decode a (cid, payload) tuple into a typed `SeaTracMessage` using
+/// the `from_bytes` helpers implemented in `seatrac::structs`.
+pub fn decode_payload(cid: enums::CID_E, payload: &[u8]) -> Result<SeaTracMessage, Box<dyn Error>> {
+    match cid {
+        // The device uses the same CID for the settings GET response. Serial code
+        // also waits for `CID_SETTINGS_GET` when requesting settings.
+        enums::CID_E::CID_SETTINGS_GET => {
+            let s = SETTINGS_T::from_bytes(payload)?;
+            Ok(SeaTracMessage::Settings(s))
+        }
+        enums::CID_E::CID_XCVR_USBL => {
+            let u = XCVR_USBL::from_bytes(payload)?;
+            Ok(SeaTracMessage::XcvrUsbl(u))
+        }
+        // enum uses singular `CID_XCVR_BASELINE` in the spec file
+        enums::CID_E::CID_XCVR_BASELINE => {
+            let b = XCVR_BASELINES::from_bytes(payload)?;
+            Ok(SeaTracMessage::XcvrBaselines(b))
+        }
+        enums::CID_E::CID_DAT_RECEIVE => {
+            // Keep DAT payload raw; parsing into DAT_RECEIVE requires the full
+            // frame layout and is implemented elsewhere (if needed).
+            Ok(SeaTracMessage::DatReceive(payload.to_vec()))
+        }
+        other => Ok(SeaTracMessage::Raw(other, payload.to_vec())),
+    }
+}
+
+/// Convenience: parse an ASCII message then decode into a typed `SeaTracMessage`.
+/// Returns (typed_message, checksum, raw_bytes_of_decoded_payload)
+pub fn parse_and_decode_message(msg: &[u8]) -> Result<(SeaTracMessage, u16, Vec<u8>), Box<dyn Error>> {
+    let (cid, payload, checksum) = parse_response(msg)?;
+    let typed = decode_payload(cid, &payload)?;
+    Ok((typed, checksum, payload))
 }
 
 

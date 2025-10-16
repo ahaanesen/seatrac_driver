@@ -1,4 +1,0 @@
-port_name: "/dev/ttyUSB0"
-baud_rate: 115200
-propagation_time: 80 #Propagation time per byte in ms
-salinity: 0.0 # Ex: 0.0 - fresh water, 35.0 - avg sea water

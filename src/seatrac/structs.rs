@@ -59,12 +59,12 @@ impl ACOMSG_T {
     }
 }
 
-// ACOFIX_T is incomplete, fix later
+
 #[derive(Debug, Clone)]
 pub struct ACOFIX_T { // Acoustic Position and Range Fix Summary
     pub dest_id: u8, // BID_E
     pub src_id: u8, // BID_E
-    pub flags: u8,
+    pub flags: ACOFIX_FLAGS,
     pub msg_type: AMSGTYPE_E,
     pub attitude_yaw: i16,
     pub attitude_pitch: i16,
@@ -95,7 +95,7 @@ impl ACOFIX_T {
     pub fn new(
         dest_id: u8,
         src_id: u8,
-        flags: u8,
+        flags: ACOFIX_FLAGS,
         msg_type: AMSGTYPE_E,
         attitude_yaw: i16,
         attitude_pitch: i16,
@@ -139,11 +139,65 @@ impl ACOFIX_T {
             position_depth,
         }
     }
-}
-/// ACOFIX incomplete end
-/// 
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
 
-// AHRSCAL_T goes here
+        if data.len() < 48 {
+            return Err("Buffer too short to parse ACOFIX_T".into());
+        }
+
+        let dest_id = data[0];
+        let src_id = data[1];
+        let flags = ACOFIX_FLAGS::from_bits_truncate(data[2]);
+        let msg_type = AMSGTYPE_E::from_u8(data[3]).ok_or("Invalid AMSGTYPE_E value")?;
+        let attitude_yaw = i16::from_le_bytes(data[4..6].try_into()?);
+        let attitude_pitch = i16::from_le_bytes(data[6..8].try_into()?);
+        let attitude_roll = i16::from_le_bytes(data[8..10].try_into()?);
+        let depth_local = u16::from_le_bytes(data[10..12].try_into()?);
+        let vos = u16::from_le_bytes(data[12..14].try_into()?);
+        let rssi = i16::from_le_bytes(data[14..16].try_into()?);
+
+        let range_count = u32::from_le_bytes(data[16..20].try_into()?);
+        let range_time = i32::from_le_bytes(data[20..24].try_into()?);
+        let range_dist = u16::from_le_bytes(data[24..26].try_into()?);
+
+        let usbl_channels = data[26];
+        let usbl_rssi = (0..usbl_channels)
+            .map(|i| i16::from_le_bytes(data[27 + (i as usize * 2)..29 + (i as usize * 2)].try_into().unwrap()))
+            .collect();
+        let usbl_azimuth = i16::from_le_bytes(data[27 + (usbl_channels as usize * 2)..29 + (usbl_channels as usize * 2)].try_into()?);
+        let usbl_elevation = i16::from_le_bytes(data[29 + (usbl_channels as usize * 2)..31 + (usbl_channels as usize * 2)].try_into()?);
+        let usbl_fit_error = i16::from_le_bytes(data[31 + (usbl_channels as usize * 2)..33 + (usbl_channels as usize * 2)].try_into()?);
+
+        let position_easting = i16::from_le_bytes(data[33 + (usbl_channels as usize * 2)..35 + (usbl_channels as usize * 2)].try_into()?);
+        let position_northing = i16::from_le_bytes(data[35 + (usbl_channels as usize * 2)..37 + (usbl_channels as usize * 2)].try_into()?);
+        let position_depth = i16::from_le_bytes(data[37 + (usbl_channels as usize * 2)..39 + (usbl_channels as usize * 2)].try_into()?);
+
+        Ok(Self {
+            dest_id,
+            src_id,
+            flags,
+            msg_type,
+            attitude_yaw,
+            attitude_pitch,
+            attitude_roll,
+            depth_local,
+            vos,
+            rssi,
+            range_count,
+            range_time,
+            range_dist,
+            usbl_channels,
+            usbl_rssi,
+            usbl_azimuth,
+            usbl_elevation,
+            usbl_fit_error,
+            position_easting,
+            position_northing,
+            position_depth,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AHRSCAL_T { // AHRS Calibration Coefficients
     // Accelerometer calibration values
@@ -170,24 +224,171 @@ pub struct AHRSCAL_T { // AHRS Calibration Coefficients
     pub gyro_offset_y: i16,
     pub gyro_offset_z: i16,
 }
-// AHRSCAL_T incomplete end
 
+// XCVR_FIX payload is ACOFIX_T
 
-// Chapter 7. Beacon Management Message Definitions
-// TODO: add settings_t
+#[derive(Debug, Clone, PartialEq)]
+pub struct XCVR_USBL {
+    pub xcor_sig_peakfloat: f32,
+    pub xcor_threshold: f32,
+    pub xcor_cross_point: u16,
+    pub xcor_cross_mag: f32,
+    pub xcor_detect: u16,
+    pub xcor_length: u16,
+    pub xcor_data: Vec<f32>,
+    pub channels: u8,
+    pub channel_rssi: Vec<i16>,
+    pub baselines: u8,
+    pub phase_angle: Vec<f32>,
+    pub signal_azimuth: i16,
+    pub signal_elevation: i16,
+    pub signal_fit_error: f32,
+    pub beacon_dest_id: enums::BID_E,
+    pub beacon_src_id: enums::BID_E,
+}
+impl XCVR_USBL {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
 
-// Chapter 8. Acoustic Protocol Stack Message Definitions
+        if data.len() < 20 {
+            return Err("Buffer too short to parse XCVR_USBL".into());
+        }
+
+        let xcor_sig_peakfloat = f32::from_le_bytes(data[0..4].try_into()?);
+        let xcor_threshold = f32::from_le_bytes(data[4..8].try_into()?);
+        let xcor_cross_point = u16::from_le_bytes(data[8..10].try_into()?);
+        let xcor_cross_mag = f32::from_le_bytes(data[10..14].try_into()?);
+        let xcor_detect = u16::from_le_bytes(data[14..16].try_into()?);
+        let xcor_length = u16::from_le_bytes(data[16..18].try_into()?);
+
+        let num_floats = (xcor_length as usize).min((data.len() - 18) / 4);
+        let mut xcor_data = Vec::with_capacity(num_floats);
+        for i in 0..num_floats {
+            let start = 18 + i * 4;
+            let end = start + 4;
+            if end <= data.len() {
+                xcor_data.push(f32::from_le_bytes(data[start..end].try_into()?));
+            }
+        }
+
+        // After xcor_data, we have channels and channel_rssi
+        let offset_after_xcor = 18 + num_floats * 4;
+        if offset_after_xcor + 1 > data.len() {
+            return Err("Buffer too short to read channels".into());
+        }
+        let channels = data[offset_after_xcor];
+        let mut channel_rssi = Vec::with_capacity(channels as usize);
+        for i in 0..channels {
+            let start = offset_after_xcor + 1 + (i as usize) * 2;
+            let end = start + 2;
+            if end <= data.len() {
+                channel_rssi.push(i16::from_le_bytes(data[start..end].try_into()?));
+            }
+        }
+
+        // After channel_rssi, we have baselines and phase_angle
+        let offset_after_rssi = offset_after_xcor + 1 + (channels as usize) * 2;
+        if offset_after_rssi + 1 > data.len() {
+            return Err("Buffer too short to read baselines count".into());
+        }
+        let baselines = data[offset_after_rssi];
+        let mut phase_angle: Vec<f32> = Vec::with_capacity(baselines as usize);
+        let mut offset_after_phase = offset_after_rssi + 1;
+        // read baselines number of f32 angles
+        for i in 0..(baselines as usize) {
+            let start = offset_after_phase + i * 4;
+            let end = start + 4;
+            if end > data.len() {
+                return Err("Buffer too short to read phase_angle values".into());
+            }
+            phase_angle.push(f32::from_le_bytes(data[start..end].try_into()?));
+        }
+        offset_after_phase += (baselines as usize) * 4;
+
+        // Now read signal azimuth, elevation, fit_error
+        if offset_after_phase + 2 > data.len() {
+            return Err("Buffer too short to read signal_azimuth".into());
+        }
+        let signal_azimuth = i16::from_le_bytes(data[offset_after_phase..offset_after_phase + 2].try_into()?);
+        offset_after_phase += 2;
+        if offset_after_phase + 2 > data.len() {
+            return Err("Buffer too short to read signal_elevation".into());
+        }
+        let signal_elevation = i16::from_le_bytes(data[offset_after_phase..offset_after_phase + 2].try_into()?);
+        offset_after_phase += 2;
+        if offset_after_phase + 4 > data.len() {
+            return Err("Buffer too short to read signal_fit_error".into());
+        }
+        let signal_fit_error = f32::from_le_bytes(data[offset_after_phase..offset_after_phase + 4].try_into()?);
+        offset_after_phase += 4;
+
+        // Finally beacon destination and source IDs (each 1 byte)
+        if offset_after_phase + 2 > data.len() {
+            return Err("Buffer too short to read beacon ids".into());
+        }
+        let beacon_dest_id = enums::BID_E::from_u8(data[offset_after_phase]).ok_or("Invalid BID_E for beacon_dest_id")?;
+        offset_after_phase += 1;
+        let beacon_src_id = enums::BID_E::from_u8(data[offset_after_phase]).ok_or("Invalid BID_E for beacon_src_id")?;
+
+        Ok(Self {
+            xcor_sig_peakfloat,
+            xcor_threshold,
+            xcor_cross_point,
+            xcor_cross_mag,
+            xcor_detect,
+            xcor_length,
+            xcor_data,
+            channels,
+            channel_rssi,
+            baselines,
+            phase_angle,
+            signal_azimuth,
+            signal_elevation,
+            signal_fit_error,
+            beacon_dest_id,
+            beacon_src_id,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct XCVR_BASELINES {
+    pub beacon_src_id: enums::BID_E,
+    pub baseline_count: u8,
+    pub baselines: Vec<f32>,
+}
+impl XCVR_BASELINES {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+        use std::convert::TryInto;
+        if data.len() < 2 {
+            return Err("Buffer too short to parse XCVR_BASELINES".into());
+        }
+        let beacon_src_id = enums::BID_E::from_u8(data[0]).ok_or("Invalid BID_E for beacon_src_id")?;
+        let baseline_count = data[1];
+        let mut baselines: Vec<f32> = Vec::with_capacity(baseline_count as usize);
+        let mut offset: usize = 2;
+        for _ in 0..(baseline_count as usize) {
+            if offset + 4 > data.len() {
+                return Err("Buffer too short to read baseline values".into());
+            }
+            let v = f32::from_le_bytes(data[offset..offset + 4].try_into()?);
+            baselines.push(v);
+            offset += 4;
+        }
+        Ok(Self { beacon_src_id, baseline_count, baselines })
+
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DAT_SEND {
-    pub msg_id: CID_E,
+    // pub msg_id: CID_E,
     pub dest_id: u8,
     pub msg_type: AMSGTYPE_E,
     pub packet_len: u8,
     pub packet_data: Vec<u8>,
 }
 pub struct DAT_RECEIVE {
-    pub msg_id: CID_E,
+    //pub msg_id: CID_E,
     pub aco_fix: Vec<u8>,
     pub ack_flag: bool,
     pub packet_len: u8,
@@ -198,7 +399,7 @@ pub struct DAT_RECEIVE {
 impl DAT_SEND{
     pub fn new(dest_id: u8, packet_data: Vec<u8>) -> DAT_SEND {
         let dat_send_str = DAT_SEND {
-            msg_id: CID_E::CID_DAT_SEND,
+            //msg_id: CID_E::CID_DAT_SEND,
             dest_id: dest_id,
             msg_type: AMSGTYPE_E::MSG_OWAY,
             packet_len: packet_data.len() as u8,
@@ -213,7 +414,7 @@ impl DAT_RECEIVE{
         let pac_len = received[18];
         let n_us = usize::try_from(pac_len).unwrap();
         let dat_send_str = DAT_RECEIVE {
-            msg_id: CID_E::CID_DAT_RECEIVE,
+            // msg_id: CID_E::CID_DAT_RECEIVE,
             aco_fix: received[1..17].to_vec(),
             ack_flag: u8_to_bool(received[17]),
             packet_len: received[18],
@@ -233,6 +434,48 @@ pub fn u8_to_bool(v: u8)->bool{
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SETTINGS_T {
+    pub status_flags: u8,                // STATUS_FLAGS
+    pub status_mode: enums::STATUSMODE_E, // STATUS_MODE (bits[2:0] of status_flags)
+    pub status_output: STATUS_BITS_T,    // STATUS_OUTPUT
+    pub uart_main_baud: BAUDRATE_E,      // UART_MAIN_BAUD - only applied after reboot
+    pub uart_aux_baud: BAUDRATE_E,       // UART_AUX_BAUD (reserved) - only applied after reboot
+    pub net_mac_addr: MACADDR_T,         // NET_MAC_ADDR - only applied after reboot
+    pub net_ip_addr: IPADDR_T,           // NET_IP_ADDR - only applied after reboot
+    pub net_ip_subnet: IPADDR_T,         // NET_IP_SUBNET - only applied after reboot
+    pub net_ip_gateway: IPADDR_T,        // NET_IP_GATEWAY - only applied after reboot
+    pub net_ip_dns: IPADDR_T,            // NET_IP_DNS - only applied after reboot
+    pub net_tcp_port: u16,               // NET_TCP_PORT - only applied after reboot
+    pub env_flags: u8,                   // ENV_FLAGS - Bit[1]=AUTO_PRESSURE_OFS, Bit[0]=AUTO_VOS
+    pub env_pressure_ofs: i32,
+    pub env_salinity: u16,
+    pub env_vos: u16,
+    pub ahrs_flags: u8,                  // AHRS_FLAGS - Bits[7:1] = RESERVED, Bit[0]=AUTO_MAG_CAL
+    pub ahrs_cal: AHRSCAL_T,
+    pub ahrs_yaw_offset: u16,
+    pub ahrs_pitch_offset: u16,
+    pub ahrs_roll_offset: u16,
+    pub xcvr_flags: XCVR_FLAGS,                 // XCVR_FLAGS - 
+                                        /*  Bit[7] = XCVR_DIAG_MSGS,
+                                            Bit[6] = XCVR_FIX_MSGS,
+                                            Bit[5] = XCVR_USBL_MSGS,
+                                            Bits[4:3] = XCVR_TX_MSGCTRL,
+                                            Bit[2] = XCVR_BASELINES_MSGS,
+                                            Bit[1] = XCVR_POSFLT_ENABLE,
+                                            Bit[0] = USBL_USE_AHRS
+                                        */
+    pub xcvr_beacon_id: enums::BID_E,   // Valid values are from 1 to 100 (0x1 to 0xF). A value of 0 (BEACON_ALL) should not be used.
+    pub xcvr_range_tmo: u16,            // Values are encoded in metres. Valid values are in the range 100m to 3000m.
+    pub xcvr_resp_time: u16,            // Values are encoded in milliseconds. Valid values are in the range 10ms to 1000ms.
+    pub xcvr_yaw: u16,                  // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are cyclically wrapped to the range 0° to 359.9°.
+    pub xcvr_pitch: u16,                // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are in the range -90.0° to +90.0°.
+    pub xcvr_roll: u16,                 // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are in the range -180.0° to +180.0°.
+    pub xcvr_posflt_vel: u8,
+    pub xcvr_posflt_ang: u8,
+    pub xcvr_posflt_tmo: u8,
+}
+
 impl SETTINGS_T {
     ///ulti-byte integers and IEEE-754 little-endian
     /// for f32 values. Returns an e Parse SETTINGS_T from a byte vector.
@@ -240,10 +483,10 @@ impl SETTINGS_T {
     /// The function reads fields in the order declared in the struct and expects
     /// little-endian encoding for mrror if the buffer is too short or if any
     /// enum conversion fails.
-    pub fn from_hex(data: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
         use std::convert::TryInto;
 
-        let buf = data.as_slice();
+        let buf = data;
         let mut i: usize = 0;
 
         fn ensure(buf: &[u8], idx: usize, need: usize) -> Result<(), Box<dyn std::error::Error>> {
@@ -369,6 +612,7 @@ impl SETTINGS_T {
         let ahrs_pitch_offset = read_u16(buf, &mut i)?;
         let ahrs_roll_offset = read_u16(buf, &mut i)?;
         let xcvr_flags = read_u8(buf, &mut i)?;
+        let xcvr_flags = XCVR_FLAGS::from_bits_truncate(xcvr_flags);
 
         let xcvr_beacon_id_raw = read_u8(buf, &mut i)?;
         let xcvr_beacon_id = match enums::BID_E::from_u8(xcvr_beacon_id_raw) {
@@ -464,7 +708,7 @@ impl SETTINGS_T {
         v.extend_from_slice(&self.ahrs_yaw_offset.to_le_bytes());
         v.extend_from_slice(&self.ahrs_pitch_offset.to_le_bytes());
         v.extend_from_slice(&self.ahrs_roll_offset.to_le_bytes());
-        v.push(self.xcvr_flags);
+        v.push(self.xcvr_flags.bits());
         v.push(self.xcvr_beacon_id.to_u8());
         v.extend_from_slice(&self.xcvr_range_tmo.to_le_bytes());
         v.extend_from_slice(&self.xcvr_resp_time.to_le_bytes());
@@ -479,54 +723,11 @@ impl SETTINGS_T {
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SETTINGS_T {
-    pub status_flags: u8,                // STATUS_FLAGS
-    pub status_mode: enums::STATUSMODE_E, // STATUS_MODE (bits[2:0] of status_flags)
-    pub status_output: STATUS_BITS_T,    // STATUS_OUTPUT
-    pub uart_main_baud: BAUDRATE_E,      // UART_MAIN_BAUD - only applied after reboot
-    pub uart_aux_baud: BAUDRATE_E,       // UART_AUX_BAUD (reserved) - only applied after reboot
-    pub net_mac_addr: MACADDR_T,         // NET_MAC_ADDR - only applied after reboot
-    pub net_ip_addr: IPADDR_T,           // NET_IP_ADDR - only applied after reboot
-    pub net_ip_subnet: IPADDR_T,         // NET_IP_SUBNET - only applied after reboot
-    pub net_ip_gateway: IPADDR_T,        // NET_IP_GATEWAY - only applied after reboot
-    pub net_ip_dns: IPADDR_T,            // NET_IP_DNS - only applied after reboot
-    pub net_tcp_port: u16,               // NET_TCP_PORT - only applied after reboot
-    pub env_flags: u8,                   // ENV_FLAGS - Bit[1]=AUTO_PRESSURE_OFS, Bit[0]=AUTO_VOS
-    pub env_pressure_ofs: i32,
-    pub env_salinity: u16,
-    pub env_vos: u16,
-    pub ahrs_flags: u8,                  // AHRS_FLAGS - Bits[7:1] = RESERVED, Bit[0]=AUTO_MAG_CAL
-    pub ahrs_cal: AHRSCAL_T,
-    pub ahrs_yaw_offset: u16,
-    pub ahrs_pitch_offset: u16,
-    pub ahrs_roll_offset: u16,
-    pub xcvr_flags: u8,                 // XCVR_FLAGS - 
-                                        /*  Bit[7] = XCVR_DIAG_MSGS,
-                                            Bit[6] = XCVR_FIX_MSGS,
-                                            Bit[5] = XCVR_USBL_MSGS,
-                                            Bits[4:3] = XCVR_TX_MSGCTRL,
-                                            Bit[2] = XCVR_BASELINES_MSGS,
-                                            Bit[1] = XCVR_POSFLT_ENABLE,
-                                            Bit[0] = USBL_USE_AHRS
-                                        */
-    pub xcvr_beacon_id: enums::BID_E,   // Valid values are from 1 to 100 (0x1 to 0xF). A value of 0 (BEACON_ALL) should not be used.
-    pub xcvr_range_tmo: u16,            // Values are encoded in metres. Valid values are in the range 100m to 3000m.
-    pub xcvr_resp_time: u16,            // Values are encoded in milliseconds. Valid values are in the range 10ms to 1000ms.
-    pub xcvr_yaw: u16,                  // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are cyclically wrapped to the range 0° to 359.9°.
-    pub xcvr_pitch: u16,                // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are in the range -90.0° to +90.0°.
-    pub xcvr_roll: u16,                 // Values are encoded as deci-degrees, so divide the value by 10 to obtain a value in degrees. Valid values are in the range -180.0° to +180.0°.
-    pub xcvr_posflt_vel: u8,
-    pub xcvr_posflt_ang: u8,
-    pub xcvr_posflt_tmo: u8,
-}
-
+// Helper structs for SETTINGS_T
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MACADDR_T {
     pub addr: u64,
 }
-
 impl MACADDR_T {
     /// Create from bytes in reverse order: [byte0, byte1, ..., byte5]
     pub fn from_bytes(bytes: [u8; 6]) -> Self {
@@ -553,12 +754,10 @@ impl MACADDR_T {
     } */
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IPADDR_T {
     pub addr: u32,
 }
-
 impl IPADDR_T {
     /// Create from bytes in reverse order: [byte0, byte1, byte2, byte3]
     pub fn from_bytes(bytes: [u8; 4]) -> Self {
@@ -580,16 +779,42 @@ impl IPADDR_T {
     }
 }
 
+// STATUS_BITS_T and XCVR_FLAGS use the bitflags crate for convenient bitwise operations
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct STATUS_BITS_T: u8 {
-        const ENVIRONMENT     = 0b0000_0001; // Bit 0
-        const ATTITUDE        = 0b0000_0010; // Bit 1
-        const MAG_CAL         = 0b0000_0100; // Bit 2
-        const ACC_CAL         = 0b0000_1000; // Bit 3
-        const AHRS_RAW_DATA   = 0b0001_0000; // Bit 4
-        const AHRS_COMP_DATA  = 0b0010_0000; // Bit 5
+        const RESERVED        = 0b1100_0000; // Bits 7:6 reserved
+        const AHRS_COMP_DATA  = 1 << 5; // Bit 5
+        const AHRS_RAW_DATA   = 1 << 4; // Bit 4
+        const ACC_CAL         = 1 << 3; // Bit 3
+        const MAG_CAL         = 1 << 2; // Bit 2
+        const ATTITUDE        = 1 << 1; // Bit 1
+        const ENVIRONMENT     = 1 << 0; // Bit 0
         // Bits 6 and 7 are reserved and treated as 0
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct XCVR_FLAGS: u8 {
+        const DIAG_MSGS        = 1 << 7;
+        const FIX_MSGS         = 1 << 6;
+        const USBL_MSGS        = 1 << 5;
+        const TX_MSGCTRL_0     = 0 << 3; // Bits 4:3 = 00
+        const TX_MSGCTRL_1     = 1 << 3; // Bits 4:3 = 01
+        const TX_MSGCTRL_2     = 2 << 3; // Bits 4:3 = 10
+        const TX_MSGCTRL_3     = 3 << 3; // Bits 4:3 = 11
+        const BASELINES_MSGS   = 1 << 2;
+        const POSFLT_ENABLE    = 1 << 1;
+        const USBL_USE_AHRS    = 1 << 0;
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct ACOFIX_FLAGS: u8 {
+        const RESERVED           = 0b1110_0000; // Bits 7:5
+        const POSITION_FLT_ERROR = 1 << 4; // Bit 4
+        const POSITION_ENHANCED  = 1 << 3; // Bit 3
+        const POSITION_VALID     = 1 << 2; // Bit 2
+        const USBL_VALID         = 1 << 1; // Bit 1
+        const RANGE_VALID        = 1 << 0; // Bit 0
     }
 }
 

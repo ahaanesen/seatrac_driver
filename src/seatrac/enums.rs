@@ -13,7 +13,7 @@
 
 #![allow(non_camel_case_types)]
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AMSGTYPE_E { // Acoustic Message Type
     MSG_OWAY = 0x0,
     MSG_OWAYU = 0x1,
@@ -43,7 +43,7 @@ impl AMSGTYPE_E {
     }
 }
 
-#[derive(Debug,Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum APAYLOAD_E { // Acoustic Payload Identifier (APAYLOAD_E)
     PLOAD_PING = 0x0,
     PLOAD_ECHO = 0x1,
@@ -180,7 +180,7 @@ impl BID_E {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CAL_ACTION_E { // CalibrationAction
     CAL_ACC_DEFAULTS = 0x00,
     CAL_ACC_RESET = 0x01,
@@ -214,20 +214,25 @@ pub enum CID_E { // Command Identification Codes
     CID_SYS_INFO = 0x02,
     CID_SYS_REBOOT = 0x03,
     CID_SYS_ENGINEERING = 0x04,
+
     CID_PROG_INIT = 0x0D,
     CID_PROG_BLOCK = 0x0E,
     CID_PROG_UPDATE = 0x0F,
+
     CID_STATUS = 0x10,
     CID_STATUS_CFG_GET = 0x11,
     CID_STATUS_CFG_SET = 0x12,
+
     CID_SETTINGS_GET = 0x15, // Request to get the current settings from the device.
     CID_SETTINGS_SET = 0x16, // Command to set new settings on the device.
     CID_SETTINGS_LOAD = 0x17,
     CID_SETTINGS_SAVE = 0x18, // Command to save the current settings to non-volatile memory.
     CID_SETTINGS_RESET = 0x19,
+
     CID_CAL_ACTION = 0x20,
     CID_AHRS_CAL_GET = 0x21,
     CID_AHRS_CAL_SET = 0x22,
+
     CID_XCVR_ANALYSE = 0x30,
     CID_XCVR_TX_MSG = 0x31,
     CID_XCVR_RX_ERR = 0x32,
@@ -239,14 +244,19 @@ pub enum CID_E { // Command Identification Codes
     CID_XCVR_FIX = 0x39, // Message generated when the transceiver gets a position/range fix on a beacon from a request/response (any message type?).
     CID_XCVR_STATUS = 0x3A,
     CID_XCVR_TX_MSGCTRL_SET = 0x3B,
+    CID_XCVR_USBL_TIME = 0x3C,
+    CID_XCVR_BASELINE = 0x3D,
+
     CID_PING_SEND = 0x40, // Command sent to initiate a ping.
     CID_PING_REQ = 0x41, // Message generated when a ping is received.
     CID_PING_RESP = 0x42, // Message generated when a ping request is received and a ping response is sent.
     CID_PING_ERROR = 0x43, // Message generated if no response is received to a ping within the timeout period.
+    
     CID_ECHO_SEND = 0x48,
     CID_ECHO_REQ = 0x49,
     CID_ECHO_RESP = 0x4A,
     CID_ECHO_ERROR = 0x4B,
+
     CID_NAV_QUERY_SEND = 0x50,
     CID_NAV_QUERY_REQ = 0x51,
     CID_NAV_QUERY_RESP = 0x52,
@@ -256,15 +266,24 @@ pub enum CID_E { // Command Identification Codes
     CID_NAV_QUEUE_STATUS = 0x5A,
     CID_NAV_STATUS_SEND = 0x5B,
     CID_NAV_STATUS_RECEIVE = 0x5C,
+    CID_NAV_QUEUE_GET = 0x5D,
+
     CID_DAT_SEND = 0x60,
     CID_DAT_RECEIVE = 0x61,
     CID_DAT_ERROR = 0x63,
     CID_DAT_QUEUE_SET = 0x64,
     CID_DAT_QUEUE_CLR = 0x65,
     CID_DAT_QUEUE_STATUS = 0x66,
+    CID_DAT_QUEUE_GET = 0x67,
+
     CID_CFG_BEACON_GET = 0x80,
     CID_CFG_BEACON_SET = 0x81,
     CID_CFG_BEACON_RESP = 0x82,
+    CID_CFG_REQ_SEND = 0x83,
+    CID_CFG_REQ_RECEIVE = 0x84,
+    CID_CFG_RESP_SEND = 0x85,
+    CID_CFG_RESP_RECEIVE = 0x86,
+    // TODO: complete the rest of the CID_E values
 }
 
 impl CID_E {
@@ -299,6 +318,8 @@ impl CID_E {
             0x39 => Some(CID_E::CID_XCVR_FIX),
             0x3A => Some(CID_E::CID_XCVR_STATUS),
             0x3B => Some(CID_E::CID_XCVR_TX_MSGCTRL_SET),
+            0x3C => Some(CID_E::CID_XCVR_USBL_TIME),
+            0x3D => Some(CID_E::CID_XCVR_BASELINE),
             0x40 => Some(CID_E::CID_PING_SEND),
             0x41 => Some(CID_E::CID_PING_REQ),
             0x42 => Some(CID_E::CID_PING_RESP),
@@ -316,15 +337,21 @@ impl CID_E {
             0x5A => Some(CID_E::CID_NAV_QUEUE_STATUS),
             0x5B => Some(CID_E::CID_NAV_STATUS_SEND),
             0x5C => Some(CID_E::CID_NAV_STATUS_RECEIVE),
+            0x5D => Some(CID_E::CID_NAV_QUEUE_GET),
             0x60 => Some(CID_E::CID_DAT_SEND),
             0x61 => Some(CID_E::CID_DAT_RECEIVE),
             0x63 => Some(CID_E::CID_DAT_ERROR),
             0x64 => Some(CID_E::CID_DAT_QUEUE_SET),
             0x65 => Some(CID_E::CID_DAT_QUEUE_CLR),
             0x66 => Some(CID_E::CID_DAT_QUEUE_STATUS),
+            0x67 => Some(CID_E::CID_DAT_QUEUE_GET),
             0x80 => Some(CID_E::CID_CFG_BEACON_GET),
             0x81 => Some(CID_E::CID_CFG_BEACON_SET),
             0x82 => Some(CID_E::CID_CFG_BEACON_RESP),
+            0x83 => Some(CID_E::CID_CFG_REQ_SEND),
+            0x84 => Some(CID_E::CID_CFG_REQ_RECEIVE),
+            0x85 => Some(CID_E::CID_CFG_RESP_SEND),
+            0x86 => Some(CID_E::CID_CFG_RESP_RECEIVE),
             _ => None,
         }
     }
@@ -361,6 +388,8 @@ impl CID_E {
             CID_E::CID_XCVR_FIX => 0x39,
             CID_E::CID_XCVR_STATUS => 0x3A,
             CID_E::CID_XCVR_TX_MSGCTRL_SET => 0x3B,
+            CID_E::CID_XCVR_USBL_TIME => 0x3C,
+            CID_E::CID_XCVR_BASELINE => 0x3D,
             CID_E::CID_PING_SEND => 0x40,
             CID_E::CID_PING_REQ => 0x41,
             CID_E::CID_PING_RESP => 0x42,
@@ -378,15 +407,21 @@ impl CID_E {
             CID_E::CID_NAV_QUEUE_STATUS => 0x5A,
             CID_E::CID_NAV_STATUS_SEND => 0x5B,
             CID_E::CID_NAV_STATUS_RECEIVE => 0x5C,
+            CID_E::CID_NAV_QUEUE_GET => 0x5D,
             CID_E::CID_DAT_SEND => 0x60,
             CID_E::CID_DAT_RECEIVE => 0x61,
             CID_E::CID_DAT_ERROR => 0x63,
             CID_E::CID_DAT_QUEUE_SET => 0x64,
             CID_E::CID_DAT_QUEUE_CLR => 0x65,
             CID_E::CID_DAT_QUEUE_STATUS => 0x66,
+            CID_E::CID_DAT_QUEUE_GET => 0x67,
             CID_E::CID_CFG_BEACON_GET => 0x80,
             CID_E::CID_CFG_BEACON_SET => 0x81,
             CID_E::CID_CFG_BEACON_RESP => 0x82,
+            CID_E::CID_CFG_REQ_SEND => 0x83,
+            CID_E::CID_CFG_REQ_RECEIVE => 0x84,
+            CID_E::CID_CFG_RESP_SEND => 0x85,
+            CID_E::CID_CFG_RESP_RECEIVE => 0x86,
         }
     }
 }
@@ -559,7 +594,7 @@ impl STATUSMODE_E {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XCVR_TXMSGCTRL_E { // Transmit Message Control
     XCVR_TXMSG_ALLOW_ALL = 0x0,
     XCVR_TXMSG_BLOCK_RESP = 0x1,
