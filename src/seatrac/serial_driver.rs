@@ -3,8 +3,7 @@ use std::time::{Duration, Instant};
 use std::error::Error;
 use std::io::{Read, Write};
 use crate::modem_driver::ModemDriver;
-use log::{info, warn};
-use crate::seatrac::enums::{self, CID_E, CST_E, BAUDRATE_E, BID_E};
+use crate::seatrac::enums::{self, CID_E, CST_E};
 use crate::seatrac::ascii_message::{make_command, parse_response, make_command_u16};
 use crate::seatrac::structs::{SETTINGS_T, XCVR_FLAGS};
 

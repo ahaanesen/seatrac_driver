@@ -19,7 +19,7 @@ variables placed under one name in a block of memory.
 For the scope of this document, the members (or fields) of Structures should be assumed to be defined sequentially
 in memory, with no additional packing bytes added. */
 
-use crate::seatrac::enums::{self, AMSGTYPE_E, APAYLOAD_E, BAUDRATE_E, CID_E, CST_E, STATUSMODE_E}; // Import enums from seatrac_enums.rs
+use crate::seatrac::enums::{self, AMSGTYPE_E, APAYLOAD_E, BAUDRATE_E}; // Import enums from seatrac_enums.rs
 
 
 #[derive(Debug, Clone)]

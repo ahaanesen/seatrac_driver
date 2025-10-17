@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use log::info;
+use std::mem;
+use crate::comms::tdma_utils::AcousticMessage;
 
 /// Struct to hold acknowledgment information for received messages
 pub struct MsgReceivedAck {
@@ -65,6 +67,12 @@ fn handle_acknowledgments(
     }
 }
 
+/// Calculate the propagation time based on the size of the message and propagation speed.
+pub fn calculate_propagation_time(acoustic_msg: &AcousticMessage, propagation_time: u64) -> u64 {
+    let message_size = mem::size_of_val(acoustic_msg) as u64;
+    let wait_time_ms = propagation_time * message_size;
+    (wait_time_ms / 1000) as u64
+}
 
 /// FieldMsg struct to hold coordinates
 pub struct PositionalCoordinates {
@@ -89,15 +97,15 @@ impl PositionalCoordinates {
 
 /// Struct to hold information about sent messages and their acknowledgments
 pub struct SentMessage {
-    pos: PositionalCoordinates,
+    acoustic_msg: AcousticMessage,
     t: u64,
     nodoid_received: Vec<i32>, // IDs of nodes that acknowledged this message
 }
 
 impl SentMessage {
-    pub fn new(pos: PositionalCoordinates, t: u64) -> Self {
+    pub fn new(acoustic_msg: AcousticMessage, t: u64) -> Self {
         SentMessage {
-            pos,
+            acoustic_msg,
             t,
             nodoid_received: Vec::new(),
         }
@@ -156,23 +164,26 @@ impl SentMsgManager {
 
     /// Lists currently stored messages with their details
     pub fn list_messages(&self) -> Vec<Vec<u64>> {
-        // Converte il dizionario in un vettore di coppie (key, msg)
+        // Convert the HashMap into a vector of (key, message) pairs
         let mut messages_vec: Vec<(&i32, &SentMessage)> = self.messages.iter().collect();
     
-        // Ordina il vettore in ordine decrescente di key
+        // Sort the vector in descending order of keys
         messages_vec.sort_by(|a, b| b.0.cmp(a.0));
     
-        // Trasforma il vettore ordinato in quello desiderato
+        // Transform the sorted vector into the desired format
         messages_vec
             .into_iter()
             .map(|(key, msg)| {
-                // Converte key in u64
+                // Convert key to u64
                 let mut result = vec![*key as u64];
+
+                // Add the CID as u64
+                result.push(msg.acoustic_msg.command_id.to_u8() as u64);
     
-                // Aggiunge i valori di pos.fields come u64
-                result.extend(msg.pos.fields.iter().map(|&field| field as u64));
-                
-                // Aggiunge il valore t
+                // Add the acoustic message payload as u64
+                result.extend(msg.acoustic_msg.payload.iter().map(|&field| field as u64));
+
+                // Add the timestamp t
                 result.push(msg.t);
     
                 result
@@ -184,7 +195,7 @@ impl SentMsgManager {
 
 
 pub struct NewMsg {
-    pub fields:PositionalCoordinates,
+    pub fields: PositionalCoordinates,
     pub t: u64
 }
 
