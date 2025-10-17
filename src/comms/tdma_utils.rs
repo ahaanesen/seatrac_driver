@@ -1,9 +1,5 @@
 // Import necessary modules
-use crate::record_message::{FieldMsg};
 use std::time::{SystemTime, UNIX_EPOCH, Duration}; // Time management utilities
-use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl}; // Serial port settings and controls
-use std::fs::{File, OpenOptions};
-use std::io::{self, Write, Read};
 
 // Function to get the total seconds since UNIX epoch
 pub fn get_total_seconds() -> u64 {
@@ -26,14 +22,3 @@ pub fn get_TDMA_slot_after_propag(cycle_duration: u64, slot_duration: u64, propa
     elapsed / slot_duration // Return current slot number
 }
 
-
-struct MsgToSend {
-    cid: enums::CID_E,
-    payload: Vec<u8>, // DCCL/protobuf encoded
-    // Add metadata if needed
-}
-struct MsgReceived {
-    cid: enums::CID_E,
-    payload: Vec<u8>,
-    // Add metadata if needed
-}

@@ -1,6 +1,6 @@
 mod modem_driver;
 mod seatrac;
-mod protocols;
+mod comms;
 use crate::{modem_driver::ModemDriver, seatrac::ascii_message::parse_response};
 
 static DEFAULT_BAUD_RATE: u32 = 115200;
@@ -22,12 +22,24 @@ fn main() {
                 panic!("Failed to open modem: {}", e);
             });
         }
+        // Can add other modem types here, e.g. "luma100"
+        // NB. might want to switch from modem_type being string to enum, but not sure how well it works in the config file
         _ => panic!("Unsupported modem type: {}", driver_config.modem_type),
-        
     }
-
     modem.configure(driver_config.usbl, DEFAULT_BAUD_RATE, driver_config.beacon_id, driver_config.salinity).unwrap();
-    // protocols::send_tdma_message(&mut modem, &[0x01, 0x02, 0x03]).unwrap();
+
+
+    let comms_config = comms::tdma::CommsConfig::load_from_file("config_comms.json").unwrap_or_else(|e| {
+        panic!("Failed to load communication configuration: {}", e);
+    });
+
+    // thread for tdma_communication with sending and listening, acks and queue
+    // thread for modem node (also ros2 node)
+    //      from tdma_comm it recieves messages and based on the message type, decides what to do with them
+    //      eg. for usbl messages, publish to ros2 topic (to be processed in EKF node)
+    //      should get its own position from somewhere (subscription to deadreconing node) and send to tdma_comm thread when needed
+    //      (also gets new messages to be sent from other nodes via ros2 topic subscription,)
+    // channels between the two threads, to send messages to be sent, and to receive received messages
     loop {
         match modem.receive() {
             Ok(data) => {

@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use std::fs;
 use std::error::Error;
 use serde_json;

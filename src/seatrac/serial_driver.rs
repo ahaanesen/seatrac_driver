@@ -157,7 +157,7 @@ impl ModemDriver for SerialModem {
             self.set_local_baud_rate(baud_rate)?;
             println!("Local serial port baud rate set to {}", baud_rate);
 
-            let reboot_resp = self.wait_for_response(CID_E::CID_SYS_REBOOT, Duration::from_secs(7))?;
+            let reboot_resp = self.wait_for_response(CID_E::CID_SYS_REBOOT, Duration::from_millis(700))?; // Reboot has 500ms deadtime
             match reboot_resp.get(0).map(|&b| CST_E::from_u8(b)) {
                 Some(Some(status)) => log::info!("Reboot command sent, status: {:?}", status),
                 _ => log::warn!("Failed to parse status from reboot response"),
