@@ -29,7 +29,7 @@ fn main() {
     modem.configure(driver_config.usbl, DEFAULT_BAUD_RATE, driver_config.beacon_id, driver_config.salinity).unwrap();
 
 
-    let comms_config = comms::tdma::CommsConfig::load_from_file("config_comms.json").unwrap_or_else(|e| {
+    let comms_config = comms::tdma_utils::CommsConfig::load_from_file("config_comms.json").unwrap_or_else(|e| {
         panic!("Failed to load communication configuration: {}", e);
     });
 

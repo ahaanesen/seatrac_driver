@@ -15,6 +15,8 @@ pub trait ModemDriver {
     /// - `salinity`: The salinity setting for the modem. Values are encoded as deci-parts-per-thousand (i.e. a value of
     ///   345 represents 34.5 ppt)
     fn configure(&mut self, usbl: bool, baud_rate: u32, beacon_id: u8, salinity: u16) -> Result<(), Box<dyn std::error::Error>>;
+    
+    
 }
 
 #[derive(serde::Deserialize)]

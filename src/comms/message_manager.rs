@@ -68,8 +68,8 @@ fn handle_acknowledgments(
 }
 
 /// Calculate the propagation time based on the size of the message and propagation speed.
-pub fn calculate_propagation_time(acoustic_msg: &AcousticMessage, propagation_time: u64) -> u64 {
-    let message_size = mem::size_of_val(acoustic_msg) as u64;
+pub fn calculate_propagation_time(acoustic_msg: &[u8], propagation_time: u64) -> u64 {
+    let message_size = acoustic_msg.len() as u64;
     let wait_time_ms = propagation_time * message_size;
     (wait_time_ms / 1000) as u64
 }
@@ -96,28 +96,29 @@ impl PositionalCoordinates {
 
 
 /// Struct to hold information about sent messages and their acknowledgments
+#[derive(Clone, Debug)]
 pub struct SentMessage {
-    acoustic_msg: AcousticMessage,
-    t: u64,
-    nodoid_received: Vec<i32>, // IDs of nodes that acknowledged this message
+    pub byte_msg: Vec<u8>,
+    pub t: u64,
+    pub nodes_acked: Vec<i32>, // IDs of nodes that acknowledged this message
 }
 
 impl SentMessage {
-    pub fn new(acoustic_msg: AcousticMessage, t: u64) -> Self {
+    pub fn new(acoustic_msg: Vec<u8>, t: u64) -> Self {
         SentMessage {
-            acoustic_msg,
+            byte_msg: acoustic_msg,
             t,
-            nodoid_received: Vec::new(),
+            nodes_acked: Vec::new(),
         }
     }
 
     /// Adds a node ID to nodoid_received; returns true if the count matches a configured constant
     pub fn add_node_ack(&mut self, node_id: i32, num_beacons: i32) -> bool {
-        if !self.nodoid_received.contains(&node_id) {
-            self.nodoid_received.push(node_id); // Add new node ID if not already present
+        if !self.nodes_acked.contains(&node_id) {
+            self.nodes_acked.push(node_id); // Add new node ID if not already present
         }
         // Return true if the number of acknowledged nodes matches a configured constant
-        self.nodoid_received.len() as i32 == (num_beacons - 1) // Replace with config constant if needed
+        self.nodes_acked.len() as i32 == (num_beacons - 1) // Replace with config constant if needed
     }
 }
 
@@ -163,32 +164,18 @@ impl SentMsgManager {
     }
 
     /// Lists currently stored messages with their details
-    pub fn list_messages(&self) -> Vec<Vec<u64>> {
+    pub fn list_messages(&self) -> Vec<(i32, SentMessage)> {
         // Convert the HashMap into a vector of (key, message) pairs
         let mut messages_vec: Vec<(&i32, &SentMessage)> = self.messages.iter().collect();
-    
+
         // Sort the vector in descending order of keys
         messages_vec.sort_by(|a, b| b.0.cmp(a.0));
-    
-        // Transform the sorted vector into the desired format
+
+        // Transform the sorted vector into the desired format by cloning the messages
         messages_vec
             .into_iter()
-            .map(|(key, msg)| {
-                // Convert key to u64
-                let mut result = vec![*key as u64];
-
-                // Add the CID as u64
-                result.push(msg.acoustic_msg.command_id.to_u8() as u64);
-    
-                // Add the acoustic message payload as u64
-                result.extend(msg.acoustic_msg.payload.iter().map(|&field| field as u64));
-
-                // Add the timestamp t
-                result.push(msg.t);
-    
-                result
-            })
-            .collect()
+            .map(|(key, msg)| (*key, msg.clone()))
+            .collect::<Vec<(i32, SentMessage)>>()
     }
     
 }
