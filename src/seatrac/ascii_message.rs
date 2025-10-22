@@ -59,6 +59,9 @@ pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
     msg.push(b'\n');
     msg
 }
+
+// TODO: unify with above function?
+/// Create ASCII command message with u16 payload
 pub fn make_command_u16(cid: enums::CID_E, payload: u16) -> Vec<u8> {
     let cid_str = format!("{:02X}", cid.to_u8());
     let payload_hex = hex::encode(payload.to_le_bytes());

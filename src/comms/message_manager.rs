@@ -47,7 +47,7 @@ pub fn received_ack_from_list(ack: Vec<i32>) -> Vec<MsgReceivedAck> {
 fn handle_acknowledgments(
     result: &mut Vec<i32>, 
     received: &mut Vec<MsgReceivedAck>, 
-    sentManage: &mut SentMsgManager, 
+    sent_manage: &mut SentMsgManager, 
     num_beacons: i32, 
     initial_time: u64,
     num_field: usize
@@ -59,7 +59,7 @@ fn handle_acknowledgments(
             let log_entry = format!("Received ACK from node {} of {} message\n", a.node_id, a.nmsg);
             println!("{}", log_entry);
             info!("{}", log_entry);
-            sentManage.add_nodoid_to_message(a.nmsg, a.node_id, num_beacons); // Update sent message manager with acknowledgments
+            sent_manage.add_nodoid_to_message(a.nmsg, a.node_id, num_beacons); // Update sent message manager with acknowledgments
         }
         received.push(MsgReceivedAck::new(result[0], result[1])); // Store received acknowledgment
     }else{
@@ -87,10 +87,10 @@ impl PositionalCoordinates {
 
     pub fn to_string(&self) -> String {
         self.fields.iter()
-            .enumerate()  // Ottieni l'indice e il valore
-            .map(|(i, value)| format!("f_{}:{}", i, value))  // Crea la stringa f_i:valore
-            .collect::<Vec<String>>()  // Colleziona tutte le stringhe in un Vec
-            .join(" ")  // Unisce i valori con uno spazio
+            .enumerate()  // Get the index and value
+            .map(|(i, value)| format!("f_{}:{}", i, value))  // Create the string f_i:value
+            .collect::<Vec<String>>()  // Collect all strings into a Vec
+            .join(" ")  // Join the values with a space
     }
 }
 

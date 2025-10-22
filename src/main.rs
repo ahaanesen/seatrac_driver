@@ -33,14 +33,10 @@ fn main() {
         panic!("Failed to load communication configuration: {}", e);
     });
 
-    // thread for tdma_communication with sending and listening, acks and queue
-    // thread for modem node (also ros2 node)
-    //      from tdma_comm it recieves messages and based on the message type, decides what to do with them
-    //      eg. for usbl messages, publish to ros2 topic (to be processed in EKF node)
-    //      should get its own position from somewhere (subscription to deadreconing node) and send to tdma_comm thread when needed
-    //      (also gets new messages to be sent from other nodes via ros2 topic subscription,)
-    // channels between the two threads, to send messages to be sent, and to receive received messages
+    
     loop {
+        // Use TDMA slots to send and receive messages
+        // want a ros2 node that publishes received messages and subscribes to outgoing messages (with some extra logic in between)
         match modem.receive() {
             Ok(data) => {
                 // println!("Received data: {:?}", data);

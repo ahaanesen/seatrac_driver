@@ -28,7 +28,7 @@ impl SerialModem {
     }
 
     /// Host-side only: change serial baud rate
-    pub fn set_local_baud_rate(&mut self, baud_rate: u32) -> Result<(), Box<dyn Error>> {
+    fn set_local_baud_rate(&mut self, baud_rate: u32) -> Result<(), Box<dyn Error>> {
         self.port.set_baud_rate(baud_rate)?;
         Ok(())
     }
@@ -109,9 +109,9 @@ impl ModemDriver for SerialModem {
         let mut settings = SETTINGS_T::from_bytes(&get_resp)?;
 
         // 2. Modify settings as needed: map incoming values to existing struct fields
-        if usbl {
-            settings.xcvr_flags |= XCVR_FLAGS::FIX_MSGS | XCVR_FLAGS::BASELINES_MSGS; 
-        }
+        // if usbl {
+        //     settings.xcvr_flags |= XCVR_FLAGS::FIX_MSGS | XCVR_FLAGS::BASELINES_MSGS; 
+        // } // Not necessary, as DAT_RECIEVE will generate USBL info if on a usbl modem
         let current_baud = settings.uart_main_baud.clone();
         let new_baud = enums::BAUDRATE_E::from_u32(baud_rate).unwrap_or(current_baud.clone());
         if new_baud == current_baud.clone() {

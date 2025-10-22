@@ -1,3 +1,4 @@
+// NB: delete?? restructuring
 use crate::modem_driver::ModemDriver;
 use crate::comms::tdma_utils::{CommsConfig};
 use crate::comms::tdma_utils::{get_tdma_slot_after_propag, get_current_tdma_slot, get_total_seconds};
@@ -98,7 +99,7 @@ pub fn tdma_communication_tcp(
             match modem.receive() {
                 Ok(data) => {
                     // Process received data
-                    listened_msg.push(data.clone());
+                    //listened_msg.push(data.clone());
 
                     from_tdma_tx.send(data.clone()).unwrap(); // Send received data to main thread
                     
