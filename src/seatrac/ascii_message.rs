@@ -39,6 +39,11 @@ fn calc_crc16(buf: &[u8]) -> u16 {
 
 // From 5.2 Message Format
 /// Create ASCII command message
+/// # Arguments
+/// * `cid` - The command identification code
+/// * `payload` - The payload data as a byte slice
+/// # Returns
+/// * A vector of bytes representing the complete ASCII command message
 pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
     // CID as two ASCII hex chars
     let cid_str = format!("{:02X}", cid.to_u8());
@@ -62,6 +67,9 @@ pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
 
 // TODO: unify with above function?
 /// Create ASCII command message with u16 payload
+/// # Arguments
+/// * `cid` - The command identification code
+/// * `payload` - The payload data as a u16 (only used for reboot?)
 pub fn make_command_u16(cid: enums::CID_E, payload: u16) -> Vec<u8> {
     let cid_str = format!("{:02X}", cid.to_u8());
     let payload_hex = hex::encode(payload.to_le_bytes());
@@ -76,6 +84,7 @@ pub fn make_command_u16(cid: enums::CID_E, payload: u16) -> Vec<u8> {
     msg.extend_from_slice(b"\r\n");
     msg
 }
+
 // TODO: check if this third option can work instead of both of the two above
 /* pub fn make_command_message(cid: enums::CID_E, payload: impl AsRef<[u8]>) -> Vec<u8> {
     // CID as two ASCII hex chars
@@ -148,54 +157,6 @@ pub fn parse_response(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16), Box<dy
 
     Ok((cid, payload, received_checksum))
 }
-
-/// Typed representation of decoded SeaTrac messages.
-/// Use `parse_and_decode_message` to obtain this from an ASCII response buffer.
-#[derive(Debug)]
-pub enum SeaTracMessage {
-    Settings(SETTINGS_T),
-    XcvrUsbl(XCVR_USBL),
-    XcvrBaselines(XCVR_BASELINES),
-    DatReceive(Vec<u8>), // payload left raw for DAT messages (parsing varies)
-    Raw(enums::CID_E, Vec<u8>),
-}
-
-/// Decode a (cid, payload) tuple into a typed `SeaTracMessage` using
-/// the `from_bytes` helpers implemented in `seatrac::structs`.
-pub fn decode_payload(cid: enums::CID_E, payload: &[u8]) -> Result<SeaTracMessage, Box<dyn Error>> {
-    match cid {
-        // The device uses the same CID for the settings GET response. Serial code
-        // also waits for `CID_SETTINGS_GET` when requesting settings.
-        enums::CID_E::CID_SETTINGS_GET => {
-            let s = SETTINGS_T::from_bytes(payload)?;
-            Ok(SeaTracMessage::Settings(s))
-        }
-        enums::CID_E::CID_XCVR_USBL => {
-            let u = XCVR_USBL::from_bytes(payload)?;
-            Ok(SeaTracMessage::XcvrUsbl(u))
-        }
-        // enum uses singular `CID_XCVR_BASELINE` in the spec file
-        enums::CID_E::CID_XCVR_BASELINE => {
-            let b = XCVR_BASELINES::from_bytes(payload)?;
-            Ok(SeaTracMessage::XcvrBaselines(b))
-        }
-        enums::CID_E::CID_DAT_RECEIVE => {
-            // Keep DAT payload raw; parsing into DAT_RECEIVE requires the full
-            // frame layout and is implemented elsewhere (if needed).
-            Ok(SeaTracMessage::DatReceive(payload.to_vec()))
-        }
-        other => Ok(SeaTracMessage::Raw(other, payload.to_vec())),
-    }
-}
-
-/// Convenience: parse an ASCII message then decode into a typed `SeaTracMessage`.
-/// Returns (typed_message, checksum, raw_bytes_of_decoded_payload)
-pub fn parse_and_decode_message(msg: &[u8]) -> Result<(SeaTracMessage, u16, Vec<u8>), Box<dyn Error>> {
-    let (cid, payload, checksum) = parse_response(msg)?;
-    let typed = decode_payload(cid, &payload)?;
-    Ok((typed, checksum, payload))
-}
-
 
 
 /* pub trait SeaTracCommand {

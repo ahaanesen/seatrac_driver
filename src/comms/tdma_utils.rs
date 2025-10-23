@@ -9,7 +9,7 @@ use crate::seatrac::enums::CID_E;
 #[derive(serde::Deserialize)]
 pub struct CommsConfig {
     pub tdma_slot_duration_s: u8,
-    pub num_beacons_in_network: u8,
+    pub beacons_in_network: u8,
     pub node_id: u8,
     pub num_floats_pos: u8,
     pub propagation_time: u64, // in ms

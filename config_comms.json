@@ -1,6 +1,6 @@
 {
     "tdma_slot_duration_s": 5,
-    "num_beacons_in_network": 2,
+    "beacons_in_network": 2,
     "node_id": 1,
     "num_floats_pos": 4,
     "propagation_time": 80
