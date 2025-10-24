@@ -380,6 +380,195 @@ impl XCVR_BASELINES {
 }
 
 #[derive(Debug, Clone)]
+pub struct STATUS_RESPONSE {
+    pub status_output: STATUS_BITS_T,
+    pub timestamp: u64,
+    pub env_supply: Option<u16>,       // The beacon's supply voltage in milli-volts
+    pub env_temp: Option<i16>,         // The temperature in deci-Celsius
+    pub env_pressure: Option<i32>,     // The external pressure in milli-bars
+    pub env_depth: Option<i32>,        // The computed depth in deci-metres
+    pub env_vos: Option<u16>,          // The velocity-of-sound in use
+    pub att_yaw: Option<i16>,   // Yaw angle in deci-degrees
+    pub att_pitch: Option<i16>, // Pitch angle in deci-degrees
+    pub att_roll: Option<i16>,  // Roll angle in deci-degrees
+    pub mag_cal_buf: Option<u8>,        // Magnetometer calibration buffer fullness (0-100%)
+    pub mag_cal_valid: Option<bool>,    // Magnetometer calibration validity
+    pub mag_cal_age: Option<u32>,       // Age of the magnetometer calibration in seconds
+    pub mag_cal_fit: Option<u8>,        // Magnetometer calibration fit percentage (0-100%)
+    pub acc_lim_min_x: Option<i16>, // Raw sensor value for -1G on X axis
+    pub acc_lim_min_y: Option<i16>, // Raw sensor value for +1G on X axis
+    pub acc_lim_min_z: Option<i16>, // Raw sensor value for -1G on Y axis
+    pub acc_lim_max_x: Option<i16>, // Raw sensor value for +1G on Y axis
+    pub acc_lim_max_y: Option<i16>, // Raw sensor value for -1G on Z axis
+    pub acc_lim_max_z: Option<i16>, // Raw sensor value for +1G on Z axis
+    pub ahrs_raw_acc_x: Option<i16>, // Raw accelerometer X-axis value
+    pub ahrs_raw_acc_y: Option<i16>, // Raw accelerometer Y-axis value
+    pub ahrs_raw_acc_z: Option<i16>, // Raw accelerometer Z-axis value
+    pub ahrs_raw_mag_x: Option<i16>, // Raw magnetometer X-axis value
+    pub ahrs_raw_mag_y: Option<i16>, // Raw magnetometer Y-axis value
+    pub ahrs_raw_mag_z: Option<i16>, // Raw magnetometer Z-axis value
+    pub ahrs_raw_gyro_x: Option<i16>, // Raw gyroscope X-axis value
+    pub ahrs_raw_gyro_y: Option<i16>, // Raw gyroscope Y-axis value
+    pub ahrs_raw_gyro_z: Option<i16>, // Raw gyroscope Z-axis value
+    pub ahrs_comp_acc_x: Option<f32>, // AHRS_COMP_ACC_X
+    pub ahrs_comp_acc_y: Option<f32>, // AHRS_COMP_ACC_Y
+    pub ahrs_comp_acc_z: Option<f32>, // AHRS_COMP_ACC_Z
+    pub ahrs_comp_mag_x: Option<f32>, // AHRS_COMP_MAG_X
+    pub ahrs_comp_mag_y: Option<f32>, // AHRS_COMP_MAG_Y
+    pub ahrs_comp_mag_z: Option<f32>, // AHRS_COMP_MAG_Z
+    pub ahrs_comp_gyro_x: Option<f32>, // AHRS_COMP_GYRO_X
+    pub ahrs_comp_gyro_y: Option<f32>, // AHRS_COMP_GYRO_Y
+    pub ahrs_comp_gyro_z: Option<f32>, // AHRS_COMP_GYRO_Z
+}
+impl STATUS_RESPONSE {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+
+        let mut offset = 0;
+
+        fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, Box<dyn std::error::Error>> {
+            if *offset + 1 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = data[*offset];
+            *offset += 1;
+            Ok(value)
+        }
+
+        fn read_u16(data: &[u8], offset: &mut usize) -> Result<u16, Box<dyn std::error::Error>> {
+            if *offset + 2 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = u16::from_le_bytes(data[*offset..*offset + 2].try_into()?);
+            *offset += 2;
+            Ok(value)
+        }
+
+        fn read_i16(data: &[u8], offset: &mut usize) -> Result<i16, Box<dyn std::error::Error>> {
+            if *offset + 2 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = i16::from_le_bytes(data[*offset..*offset + 2].try_into()?);
+            *offset += 2;
+            Ok(value)
+        }
+
+        fn read_u32(data: &[u8], offset: &mut usize) -> Result<u32, Box<dyn std::error::Error>> {
+            if *offset + 4 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = u32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
+            *offset += 4;
+            Ok(value)
+        }
+
+        fn read_i32(data: &[u8], offset: &mut usize) -> Result<i32, Box<dyn std::error::Error>> {
+            if *offset + 4 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = i32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
+            *offset += 4;
+            Ok(value)
+        }
+
+        fn read_f32(data: &[u8], offset: &mut usize) -> Result<f32, Box<dyn std::error::Error>> {
+            if *offset + 4 > data.len() {
+                return Err("Buffer too short".into());
+            }
+            let value = f32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
+            *offset += 4;
+            Ok(value)
+        }
+
+        let status_output = STATUS_BITS_T::from_bits_truncate(read_u8(data, &mut offset)?);
+        let timestamp = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
+        offset += 8;
+
+        let env_supply = Some(read_u16(data, &mut offset)?);
+        let env_temp = Some(read_i16(data, &mut offset)?);
+        let env_pressure = Some(read_i32(data, &mut offset)?);
+        let env_depth = Some(read_i32(data, &mut offset)?);
+        let env_vos = Some(read_u16(data, &mut offset)?);
+
+        let att_yaw = Some(read_i16(data, &mut offset)?);
+        let att_pitch = Some(read_i16(data, &mut offset)?);
+        let att_roll = Some(read_i16(data, &mut offset)?);
+
+        let mag_cal_buf = Some(read_u8(data, &mut offset)?);
+        let mag_cal_valid = Some(read_u8(data, &mut offset)? != 0);
+        let mag_cal_age = Some(read_u32(data, &mut offset)?);
+        let mag_cal_fit = Some(read_u8(data, &mut offset)?);
+
+        let acc_lim_min_x = Some(read_i16(data, &mut offset)?);
+        let acc_lim_min_y = Some(read_i16(data, &mut offset)?);
+        let acc_lim_min_z = Some(read_i16(data, &mut offset)?);
+        let acc_lim_max_x = Some(read_i16(data, &mut offset)?);
+        let acc_lim_max_y = Some(read_i16(data, &mut offset)?);
+        let acc_lim_max_z = Some(read_i16(data, &mut offset)?);
+
+        let ahrs_raw_acc_x = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_acc_y = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_acc_z = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_mag_x = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_mag_y = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_mag_z = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_gyro_x = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_gyro_y = Some(read_i16(data, &mut offset)?);
+        let ahrs_raw_gyro_z = Some(read_i16(data, &mut offset)?);
+
+        let ahrs_comp_acc_x = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_acc_y = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_acc_z = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_mag_x = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_mag_y = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_mag_z = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_gyro_x = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_gyro_y = Some(read_f32(data, &mut offset)?);
+        let ahrs_comp_gyro_z = Some(read_f32(data, &mut offset)?);
+
+        Ok(Self {
+            status_output,
+            timestamp,
+            env_supply,
+            env_temp,
+            env_pressure,
+            env_depth,
+            env_vos,
+            att_yaw,
+            att_pitch,
+            att_roll,
+            mag_cal_buf,
+            mag_cal_valid,
+            mag_cal_age,
+            mag_cal_fit,
+            acc_lim_min_x,
+            acc_lim_min_y,
+            acc_lim_min_z,
+            acc_lim_max_x,
+            acc_lim_max_y,
+            acc_lim_max_z,
+            ahrs_raw_acc_x,
+            ahrs_raw_acc_y,
+            ahrs_raw_acc_z,
+            ahrs_raw_mag_x,
+            ahrs_raw_mag_y,
+            ahrs_raw_mag_z,
+            ahrs_raw_gyro_x,
+            ahrs_raw_gyro_y,
+            ahrs_raw_gyro_z,
+            ahrs_comp_acc_x,
+            ahrs_comp_acc_y,
+            ahrs_comp_acc_z,
+            ahrs_comp_mag_x,
+            ahrs_comp_mag_y,
+            ahrs_comp_mag_z,
+            ahrs_comp_gyro_x,
+            ahrs_comp_gyro_y,
+            ahrs_comp_gyro_z,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DAT_SEND {
     // pub msg_id: CID_E,
     pub dest_id: u8,
@@ -387,6 +576,31 @@ pub struct DAT_SEND {
     pub packet_len: u8,
     pub packet_data: Vec<u8>,
 }
+impl DAT_SEND{
+    pub fn new(dest_id: u8, packet_data: Vec<u8>) -> DAT_SEND {
+        let dat_send_str = DAT_SEND {
+            //msg_id: CID_E::CID_DAT_SEND,
+            dest_id: dest_id,
+            msg_type: AMSGTYPE_E::MSG_OWAYU,
+            packet_len: packet_data.len() as u8,
+            packet_data: packet_data,
+        };
+        dat_send_str
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let dest_str = format!("{:02X}", self.dest_id as u8);
+        let msg_type = format!("{:02X}", self.msg_type as u8);
+        let msg_length = format!("{:02X}", self.packet_len as u8);
+        let packet_as_bytes = hex::encode(&self.packet_data);
+        bytes.extend_from_slice(dest_str.as_bytes()); // Append destination ID
+        bytes.extend_from_slice(msg_type.as_bytes()); // Append message type
+        bytes.extend_from_slice(msg_length.as_bytes()); // Append message length
+        bytes.extend_from_slice(packet_as_bytes.as_bytes()); // Append packet data
+        bytes
+    }
+}
+
 pub struct DAT_RECEIVE {
     //pub msg_id: CID_E,
     pub aco_fix: Vec<u8>,
@@ -396,21 +610,8 @@ pub struct DAT_RECEIVE {
     pub local_flag: bool
 }
 
-impl DAT_SEND{
-    pub fn new(dest_id: u8, packet_data: Vec<u8>) -> DAT_SEND {
-        let dat_send_str = DAT_SEND {
-            //msg_id: CID_E::CID_DAT_SEND,
-            dest_id: dest_id,
-            msg_type: AMSGTYPE_E::MSG_OWAY,
-            packet_len: packet_data.len() as u8,
-            packet_data: packet_data,
-        };
-        dat_send_str
-    }
-}
-
 impl DAT_RECEIVE{
-    pub fn new(received: Vec<u8>) -> DAT_RECEIVE {
+    pub fn from_bytes(received: Vec<u8>) -> DAT_RECEIVE {
         let pac_len = received[18];
         let n_us = usize::try_from(pac_len).unwrap();
         let dat_send_str = DAT_RECEIVE {

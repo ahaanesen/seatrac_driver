@@ -5,7 +5,7 @@ use std_msgs::msg::String as StringMsg;
 mod modem_driver;
 mod seatrac;
 mod comms;
-use crate::{comms::ros2_node, modem_driver::ModemDriver, seatrac::ascii_message::parse_response};
+use crate::{comms::{ack_manager::SentMsgManager, message_types, ros2_node, tdma_utils}, modem_driver::ModemDriver, seatrac::ascii_message::parse_response};
 
 static DEFAULT_BAUD_RATE: u32 = 115200;
 
@@ -22,8 +22,14 @@ fn main() -> Result<(), RclrsError> {
     let scheduler = comms::tdma_scheduler::TdmaScheduler::new(
         comms_config.beacons_in_network,
         comms_config.tdma_slot_duration_s,
+        comms_config.node_id,
     );
-    let assigned_slot = comms_config.node_id;
+    // let initial_time = fs::read_to_string("/home/khadas/ros2_ws/start_time.txt")
+    //     .expect("Unable to read file")
+    //     .trim()
+    //     .parse::<f64>()
+    //     .expect("Unable to parse start_time");
+    let initial_time: f64 = 0.0; // Hardcoded initial time for testing
 
     let mut modem;
     match driver_config.modem_type.as_str() {
@@ -31,6 +37,9 @@ fn main() -> Result<(), RclrsError> {
             modem = seatrac::serial_driver::SerialModem::new(
                 &driver_config.port_name,
                 driver_config.baud_rate,
+                driver_config.usbl,
+                driver_config.beacon_id,
+                driver_config.propagation_time,
             )
             .unwrap_or_else(|e| {
                 panic!("Failed to open modem: {}", e);
@@ -50,12 +59,16 @@ fn main() -> Result<(), RclrsError> {
     // Spawn a thread for serial + TDMA logic
     // NB: all sent and recieved CID_DAT messages need to be handeled for acks
     thread::spawn(move || {
+        let mut ack_handler = SentMsgManager::new();
         loop {
             let slot = scheduler.current_slot();
 
-            if slot == assigned_slot {
+            if scheduler.is_my_slot() {
                 // SEND SLOT
-                // TODO: send general message, like depth or status
+                scheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler);
+                // TODO: resend if needed
+                
+
 
                 // Send queued messages from ROS
                 let mut send_queue = queues.to_modem.lock().unwrap();

@@ -4,13 +4,10 @@
 - setting beacon id, salinity
 - usbl flag + usbl messages
     - for seatrac usbl enabling XCVR_FIX_MSGS and XCVR_BASELINES_MSGS (can also enable XCVR_USBL_MSGS, but is very large)
+    - CHANGE: by sending DAT messages with MSG_OWAYU, azimuth and elevation is availible in DAT_RECIEVE if the recieving modem is a usbl! Because of this, switched to only DAT messages again
 
 ## TODOs
 - finish implementation to change baudrate for seatrac modem (might work now, but not checked)
-- hashmap to sturcture messages?? (or keep it simple with match on cid)
-- tdma (thread)
-- send thread?
-- listen tread?
-- logging (what type, same type as lisa or ros2 bagging?)
+- logging (ros2 bagging)
 - ros2 thread?
-- move PositionalCoordinates struct (in message manager) to a message_types file to gather all different message types?
+- make own file in comms that makes and sends all the messages, currently in tdma_scheduler, but not sure if it makes sense

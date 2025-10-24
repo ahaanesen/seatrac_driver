@@ -13,7 +13,7 @@
 
 #![allow(non_camel_case_types)]
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AMSGTYPE_E { // Acoustic Message Type
     MSG_OWAY = 0x0,
     MSG_OWAYU = 0x1,
