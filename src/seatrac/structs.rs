@@ -60,7 +60,7 @@ impl ACOMSG_T {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ACOFIX_T { // Acoustic Position and Range Fix Summary
     pub dest_id: u8, // BID_E
     pub src_id: u8, // BID_E
@@ -74,74 +74,26 @@ pub struct ACOFIX_T { // Acoustic Position and Range Fix Summary
     pub rssi: i16,
 
     // Range
-    pub range_count: u32,
-    pub range_time: i32,
-    pub range_dist: u16,
+    pub range_count: Option<u32>,
+    pub range_time: Option<i32>,
+    pub range_dist: Option<u16>,
 
     // USBL
-    pub usbl_channels: u8,
-    pub usbl_rssi: Vec<i16>,
-    pub usbl_azimuth: i16,
-    pub usbl_elevation: i16,
-    pub usbl_fit_error: i16,
+    pub usbl_channels: Option<u8>,
+    pub usbl_rssi: Option<Vec<i16>>,
+    pub usbl_azimuth: Option<i16>,
+    pub usbl_elevation: Option<i16>,
+    pub usbl_fit_error: Option<i16>,
     
     // Position
-    pub position_easting: i16,
-    pub position_northing: i16,
-    pub position_depth: i16,
+    pub position_easting: Option<i16>,
+    pub position_northing: Option<i16>,
+    pub position_depth: Option<i16>,
 }
 
 impl ACOFIX_T {
-    pub fn new(
-        dest_id: u8,
-        src_id: u8,
-        flags: ACOFIX_FLAGS,
-        msg_type: AMSGTYPE_E,
-        attitude_yaw: i16,
-        attitude_pitch: i16,
-        attitude_roll: i16,
-        depth_local: u16,
-        vos: u16,
-        rssi: i16,
-        range_count: u32,
-        range_time: i32,
-        range_dist: u16,
-        usbl_channels: u8,
-        usbl_rssi: Vec<i16>,
-        usbl_azimuth: i16,
-        usbl_elevation: i16,
-        usbl_fit_error: i16,
-        position_easting: i16,
-        position_northing: i16,
-        position_depth: i16,
-    ) -> Self {
-        Self {
-            dest_id,
-            src_id,
-            flags,
-            msg_type,
-            attitude_yaw,
-            attitude_pitch,
-            attitude_roll,
-            depth_local,
-            vos,
-            rssi,
-            range_count,
-            range_time,
-            range_dist,
-            usbl_channels,
-            usbl_rssi,
-            usbl_azimuth,
-            usbl_elevation,
-            usbl_fit_error,
-            position_easting,
-            position_northing,
-            position_depth,
-        }
-    }
     pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-
-        if data.len() < 48 {
+        if data.len() < 16 {
             return Err("Buffer too short to parse ACOFIX_T".into());
         }
 
@@ -152,25 +104,103 @@ impl ACOFIX_T {
         let attitude_yaw = i16::from_le_bytes(data[4..6].try_into()?);
         let attitude_pitch = i16::from_le_bytes(data[6..8].try_into()?);
         let attitude_roll = i16::from_le_bytes(data[8..10].try_into()?);
+
         let depth_local = u16::from_le_bytes(data[10..12].try_into()?);
         let vos = u16::from_le_bytes(data[12..14].try_into()?);
         let rssi = i16::from_le_bytes(data[14..16].try_into()?);
+        
+        let mut offset = 16;
 
-        let range_count = u32::from_le_bytes(data[16..20].try_into()?);
-        let range_time = i32::from_le_bytes(data[20..24].try_into()?);
-        let range_dist = u16::from_le_bytes(data[24..26].try_into()?);
+        let range_count = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
+            let value = u32::from_le_bytes(data[offset..offset + 4].try_into()?);
+            offset += 4;
+            Some(value)
+        } else {
+            None
+        };
 
-        let usbl_channels = data[26];
-        let usbl_rssi = (0..usbl_channels)
-            .map(|i| i16::from_le_bytes(data[27 + (i as usize * 2)..29 + (i as usize * 2)].try_into().unwrap()))
-            .collect();
-        let usbl_azimuth = i16::from_le_bytes(data[27 + (usbl_channels as usize * 2)..29 + (usbl_channels as usize * 2)].try_into()?);
-        let usbl_elevation = i16::from_le_bytes(data[29 + (usbl_channels as usize * 2)..31 + (usbl_channels as usize * 2)].try_into()?);
-        let usbl_fit_error = i16::from_le_bytes(data[31 + (usbl_channels as usize * 2)..33 + (usbl_channels as usize * 2)].try_into()?);
+        let range_time = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
+            let value = i32::from_le_bytes(data[offset..offset + 4].try_into()?);
+            offset += 4;
+            Some(value)
+        } else {
+            None
+        };
 
-        let position_easting = i16::from_le_bytes(data[33 + (usbl_channels as usize * 2)..35 + (usbl_channels as usize * 2)].try_into()?);
-        let position_northing = i16::from_le_bytes(data[35 + (usbl_channels as usize * 2)..37 + (usbl_channels as usize * 2)].try_into()?);
-        let position_depth = i16::from_le_bytes(data[37 + (usbl_channels as usize * 2)..39 + (usbl_channels as usize * 2)].try_into()?);
+        let range_dist = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
+            let value = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let usbl_channels = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
+            let value = data[offset];
+            offset += 1;
+            Some(value)
+        } else {
+            None
+        };
+
+        let usbl_rssi = if let Some(channels) = usbl_channels {
+            let mut rssi = Vec::new();
+            for _ in 0..channels {
+                rssi.push(i16::from_le_bytes(data[offset..offset + 2].try_into()?));
+                offset += 2;
+            }
+            Some(rssi)
+        } else {
+            None
+        };
+
+        let usbl_azimuth = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let usbl_elevation = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let usbl_fit_error = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let position_easting = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let position_northing = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
+
+        let position_depth = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
+            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
+            offset += 2;
+            Some(value)
+        } else {
+            None
+        };
 
         Ok(Self {
             dest_id,
@@ -601,30 +631,31 @@ impl DAT_SEND{
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct DAT_RECEIVE {
     //pub msg_id: CID_E,
-    pub aco_fix: Vec<u8>,
+    pub aco_fix: ACOFIX_T,
     pub ack_flag: bool,
     pub packet_len: u8,
     pub packet_data: Vec<u8>,
     pub local_flag: bool
 }
 
-impl DAT_RECEIVE{
-    pub fn from_bytes(received: Vec<u8>) -> DAT_RECEIVE {
+impl DAT_RECEIVE {
+    pub fn from_bytes(received: Vec<u8>) -> Result<DAT_RECEIVE, Box<dyn std::error::Error>> {
         let pac_len = received[18];
         let n_us = usize::try_from(pac_len).unwrap();
-        let dat_send_str = DAT_RECEIVE {
+        let aco_fix = ACOFIX_T::from_bytes(&received[1..17])?;
+        let dat_receive = DAT_RECEIVE {
             // msg_id: CID_E::CID_DAT_RECEIVE,
-            aco_fix: received[1..17].to_vec(),
+            aco_fix,
             ack_flag: u8_to_bool(received[17]),
             packet_len: received[18],
-            packet_data: received[19..(19+n_us)].to_vec(),
-            local_flag: u8_to_bool(received[19+n_us])
+            packet_data: received[19..(19 + n_us)].to_vec(),
+            local_flag: u8_to_bool(received[19 + n_us]),
         };
-        dat_send_str
+        Ok(dat_receive)
     }
-    
 }
 
 pub fn u8_to_bool(v: u8)->bool{

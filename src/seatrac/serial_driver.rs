@@ -1,4 +1,5 @@
-use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl}; // Serial port settings and controls
+use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl}; use std::mem;
+// Serial port settings and controls
 use std::time::{Duration, Instant};
 use std::error::Error;
 use std::io::{Read, Write};
@@ -209,9 +210,27 @@ impl ModemDriver for SerialModem {
     fn broadcast_msg(&mut self, data: &[u8]) -> Result<(u64), Box<dyn Error>> {
         let broadcast_id = 0;
         let dat_msg = DAT_SEND::new(broadcast_id, data.to_vec());
-        let propagation_delay = calculate_propagation_time(&data, self.propagation_time_ms as u64 );
         let cmd = make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes());
+
+        let propagation_delay = mem::size_of_val(&cmd) as u64 * self.propagation_time_ms as u64;
         self.send(&cmd)?;
+
         Ok(propagation_delay)
+    }
+
+    fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
+        let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
+        make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
+    }
+
+    fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+        let (cid, payload, _) = parse_response(data)?;
+        print!("Received {} message", cid.to_string());
+        // TODO: change to only allow dat_receive?
+        Ok((cid.to_string().into(), payload))
+    }
+
+    fn is_usbl(&self) -> bool {
+        self.usbl
     }
 }

@@ -1,6 +1,5 @@
 // connected to acknowledgment manager
-use std::collections::VecDeque;
-use crate::modem_driver::ModemDriver;
+use crate::{comms::dccl::encode_input};
 
 pub struct NewMsg {
     pub position: PositionalCoordinates,
@@ -14,13 +13,27 @@ impl NewMsg{
             t
         }
     }
-    
-}
 
+    pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
+        // Convert the NewMsg struct to bytes for transmission
+        // Implement serialization logic here
+            let position_string = self.position.to_string();
+            let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", 
+                node_id,
+                message_index,
+                position_string,
+                self.t,
+                acks
+            );
+            println!("Encoding message: {}", status_string);
+            let packet_data = encode_input(&status_string).expect("Encoding failed");
+            packet_data
+    }
+}
 /// FieldMsg struct to hold coordinates
 /// Represents the positional coordinates of the node
 /// fields format: vec![x as u8, y as u8, z as u8]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PositionalCoordinates {
     pub x: u8,
     pub y: u8,
@@ -36,33 +49,115 @@ impl PositionalCoordinates {
         format!("x:{} y:{} z:{}", self.x, self.y, self.z)
     }
 }
-// pub struct PositionalCoordinates {
-//     pub fields: Vec<u8>, //TODO: maybe change to x, y and z. this is how lisa did it
-// }
 
-// impl PositionalCoordinates {
-    
-//     pub fn new(fields:Vec<u8>) -> Self {
-//         PositionalCoordinates { fields }
-//     }
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReceivedMsg {
+    pub node_id: u8,
+    pub message_index: i32,
+    pub position: PositionalCoordinates,
+    pub t_sent: u64,
+    pub t_received: u64,
+    pub acks: Vec<i32>,
+}
 
-//     pub fn to_string(&self) -> String {
-//         self.fields.iter()
-//             .enumerate()  // Get the index and value
-//             .map(|(i, value)| format!("f_{}:{}", i, value))  // Create the string f_i:value
-//             .collect::<Vec<String>>()  // Collect all strings into a Vec
-//             .join(" ")  // Join the values with a space
-//     }
-// }
+impl ReceivedMsg {
+    pub fn new_empty () -> Self {
+        ReceivedMsg {
+            node_id: 0,
+            message_index: 0,
+            position: PositionalCoordinates::new(0, 0, 0),
+            t_sent: 0,
+            t_received: 0,
+            acks: vec![],
+        }
+    }
+    pub fn from_string(data: &str, t_received: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        let parts: Vec<&str> = data.split_whitespace().collect();
+        let mut node_id = 0;
+        let mut message_index = 0;
+        let mut x = 0;
+        let mut y = 0;
+        let mut z = 0;
+        let mut t_sent = 0;
+        let mut acks: Vec<i32> = vec![];
+
+        for part in parts {
+            let kv: Vec<&str> = part.split(':').collect();
+            if kv.len() != 2 {
+                continue;
+            }
+            match kv[0] {
+                "node_id" => node_id = kv[1].parse()?,
+                "msg_idx" => message_index = kv[1].parse()?,
+                "pos" => {
+                    let coords: Vec<&str> = kv[1].split(',').collect();
+                    for coord in coords {
+                        let axis: Vec<&str> = coord.split(':').collect();
+                        if axis.len() != 2 {
+                            continue;
+                        }
+                        match axis[0] {
+                            "x" => x = axis[1].parse()?,
+                            "y" => y = axis[1].parse()?,
+                            "z" => z = axis[1].parse()?,
+                            _ => (),
+                        }
+                    }
+                }
+                "t" => t_sent = kv[1].parse()?,
+                "ack" => {
+                    let ack_str = kv[1].trim_matches(&['[', ']'][..]);
+                    for ack in ack_str.split(',') {
+                        if !ack.trim().is_empty() {
+                            acks.push(ack.trim().parse()?);
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        Ok(ReceivedMsg {
+            node_id,
+            message_index,
+            position: PositionalCoordinates::new(x, y, z),
+            t_sent,
+            t_received,
+            acks,
+        })
+    }
+    pub fn to_string(&self) -> String {
+        let position_string = self.position.to_string();
+        format!(
+            "node_id:{}, msg_idx:{}, pos:{}, t_sent:{}, t_received:{}, ack:{:?}",
+            self.node_id,
+            self.message_index,
+            position_string,
+            self.t_sent,
+            self.t_received,
+            self.acks
+        )
+    }
+}
 
 
-// pub fn prepare_new_msg(
-//     modem: &mut dyn ModemDriver,
-//     t:u64,
-//     queue_new_msg: &mut VecDeque<NewMsg>,
-// ){
-//     let pos = modem.get_position(t).unwrap(); // Get the node's position
-//     let pos = PositionalCoordinates::new(pos);
-//     let new_msg = NewMsg::new(pos, t);
-//     queue_new_msg.push_back(new_msg);
-// }
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsblData{
+    pub channels: u8,
+    pub rssi: Vec<i16>,
+    pub azimuth: i16,
+    pub elevation: i16,
+    pub fit_error: i16,
+}
+
+impl UsblData {
+    pub fn new(channels: u8, rssi: Vec<i16>, azimuth: i16, elevation: i16, fit_error: i16) -> Self {
+        UsblData {
+            channels,
+            rssi,
+            azimuth,
+            elevation,
+            fit_error,
+        }
+    }
+}

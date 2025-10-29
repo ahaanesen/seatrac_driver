@@ -4,11 +4,11 @@ use serde_json;
 pub trait ModemDriver {
     /// Sends raw bytes or a message struct, returns Result<(), Error>
     fn send(&mut self, data: &[u8]) -> Result<(), Box<dyn std::error::Error>>;
+
     /// Receives raw bytes or a message struct, returns Result<Vec<u8>, Error>
     fn receive(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
     /// Optional: configure modem, set baudrate, etc.
 
-    // TODO: take in salinity as well
     /// Configure the modem with the given parameters.
     /// - `baud_rate`: The desired baud rate for communication.
     /// - `beacon_id`: The ID of the beacon to communicate with.
@@ -19,7 +19,14 @@ pub trait ModemDriver {
     fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>>;
 
     fn broadcast_msg(&mut self, data: &[u8]) -> Result<(u64), Box<dyn Error>>;
-    
+
+    /// Making a raw byte message of given (dccl encoded) data that the modem can send
+    fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8>;
+
+    /// Parses a raw byte message received from the modem into usable (dccl encoded) data
+    fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>>;
+
+    fn is_usbl(&self) -> bool;
 }
 
 #[derive(serde::Deserialize)]

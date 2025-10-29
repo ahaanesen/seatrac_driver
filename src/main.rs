@@ -1,5 +1,5 @@
 use rclrs::*;
-use std::{thread, time::Duration};
+use std::{thread::{self, sleep}, time::Duration};
 use std_msgs::msg::String as StringMsg;
 
 mod modem_driver;
@@ -19,7 +19,7 @@ fn main() -> Result<(), RclrsError> {
         panic!("Failed to load communication configuration: {}", e);
     });
     // TODO: nb - should have beacon_id=node_id in driver and comms config
-    let scheduler = comms::tdma_scheduler::TdmaScheduler::new(
+    let tdmaScheduler = comms::tdma_scheduler::TdmaScheduler::new(
         comms_config.beacons_in_network,
         comms_config.tdma_slot_duration_s,
         comms_config.node_id,
@@ -61,40 +61,73 @@ fn main() -> Result<(), RclrsError> {
     thread::spawn(move || {
         let mut ack_handler = SentMsgManager::new();
         loop {
-            let slot = scheduler.current_slot();
 
-            if scheduler.is_my_slot() {
+            if tdmaScheduler.is_my_slot() {
                 // SEND SLOT
-                scheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler);
-                // TODO: resend if needed
-                
-
+                let slot_acks = ack_handler.initialize_ack_slot();
+                tdmaScheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler, &slot_acks, comms_config.propagation_time); // TODO: remove ack_handler from here?
 
                 // Send queued messages from ROS
+                // TODO: still missing implementation
                 let mut send_queue = queues.to_modem.lock().unwrap();
                 for msg in send_queue.drain(..) {
+                    if tdmaScheduler.get_slot_after_propag(ack_handler.wait_time) != tdmaScheduler.assigned_slot {
+                        println!("Not enough time to send new message, skipping.");
+                        break;
+                    }
+                    println!("Waiting propagation previous message ({} seconds) before sending new message.", ack_handler.wait_time);
+                    sleep(Duration::from_secs(ack_handler.wait_time));
                     // TODO: process message here maybe?
                     // TODO: can implement lisas basic position dat msg as test first?
-                    modem.send(msg.as_bytes()).unwrap();
+                    println!("Not implemented what to do with message: {}", msg);
+                }
+
+                // Resend logic
+                let next_slot = tdmaScheduler.get_slot_after_propag(ack_handler.wait_time);
+                if  !ack_handler.is_empty() && next_slot == tdmaScheduler.assigned_slot {
+                    tdmaScheduler.resend_messages(&mut modem, &mut ack_handler, &slot_acks, comms_config.propagation_time);
                 }
 
             } else {
-                // RECEIVE SLOT
-                if let Ok(data) = modem.receive() {
-                    if let Ok((cid, payload, _)) = parse_response(&data) {
-                        let formatted = format!(
-                            "CID: {:?}, Payload: {}",
-                            cid,
-                            String::from_utf8_lossy(&payload)
-                        );
-                        queues.from_modem.lock().unwrap().push(formatted.clone()); // To ROS2 network
-                        // TODO: process recieved message here 
-                        // if usbl modem, extract position data and publish to specific topic
-                        if formatted.contains("CID_DAT"){
-                            // extract position data and publish to specific topic
+                // RECEIVING SLOT
+                //let mut listened_msgs: Vec<message_types::ReceivedMsg> = vec![];
+                match tdmaScheduler.receive_message(&mut modem) {
+                    Ok((received_msg, usbl_data)) => {
+                        // Handle acks and send to ros2 network
+                        println!("Received message at t={}: msg {:?}", received_msg.t_received, received_msg.message_index);
+
+                        queues.from_modem.lock().unwrap().push(received_msg.to_string()); // To ROS2 network
+
+                        // If usbl data is present, process it
+                        if let Some(usbl) = usbl_data {
+                            println!("Received USBL data: {:?}", usbl);
+                            // TODO: fix this, want another ros2 topic to_ekf
+                            queues.from_modem.lock().unwrap().push(format!("Received USBL data: {:?}", usbl)); // To ROS2 network
                         }
+
+                        ack_handler.handle_acknowledgments(received_msg, comms_config.beacons_in_network);
+                    }
+                    Err(_e) => {
+                        //eprintln!("Error receiving message: {}", e);
+                        continue;
                     }
                 }
+
+                // if let Ok(data) = modem.receive() {
+                //     if let Ok((cid, payload, _)) = parse_response(&data) {
+                //         let formatted = format!(
+                //             "CID: {:?}, Payload: {}",
+                //             cid,
+                //             String::from_utf8_lossy(&payload)
+                //         );
+                //         queues.from_modem.lock().unwrap().push(formatted.clone()); // To ROS2 network
+                //         // TODO: process recieved message here 
+                //         // if usbl modem, extract position data and publish to specific topic
+                //         if formatted.contains("CID_DAT"){
+                //             // extract position data and publish to specific topic
+                //         }
+                //     }
+                // }
             }
 
             std::thread::sleep(Duration::from_millis(50));

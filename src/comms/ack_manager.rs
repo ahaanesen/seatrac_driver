@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use log::info;
-use std::mem;
-use crate::comms::{message_types::{NewMsg, PositionalCoordinates}, tdma_utils::AcousticMessage};
+use serde::de::value::U8Deserializer;
+use crate::comms::{dccl::encode_input, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::AcousticMessage};
 
 /// Struct to hold acknowledgment information for received messages
 pub struct MsgReceivedAck {
@@ -93,6 +93,22 @@ impl SentMessage {
         // Return true if the number of acknowledged nodes matches a configured constant
         self.nodes_acked.len() as i32 == (num_beacons - 1) // Replace with config constant if needed
     }
+
+    pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
+        // Convert the SentMessage struct to bytes for transmission
+        // Implement serialization logic here
+        let position_string = self.position.to_string();
+        let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", 
+                node_id,
+                message_index,
+                position_string,
+                self.t,
+                acks
+            );
+        println!("Encoding message: {}", status_string);
+        let packet_data = encode_input(&status_string).expect("Encoding failed");
+        packet_data
+    }
 }
 
 /// Struct to manage all sent messages awaiting acknowledgment
@@ -124,15 +140,15 @@ impl SentMsgManager {
         ack_msg
     }
 
-    //LISA
+
     /// Checks if there are any sent messages awaiting acknowledgment
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
 
     /// Adds a new message to the manager
-    pub fn add_message(&mut self, key: i32, message: SentMessage) {
-        self.messages.insert(key, message);
+    pub fn add_message(&mut self, msg_index: i32, message: SentMessage) {
+        self.messages.insert(msg_index, message);
     }
 
     /// Removes a message from the manager
@@ -170,31 +186,31 @@ impl SentMsgManager {
     }
 
     // Handle acknowledgments from received messages
-    fn handle_acknowledgments(
+    pub fn handle_acknowledgments(
         &mut self,
-        result: &mut Vec<i32>, 
-        received: &mut Vec<MsgReceivedAck>, 
-        sent_manage: &mut SentMsgManager, 
-        num_beacons: i32, 
-        initial_time: u64,
-        num_field: usize
+        received_message: message_types::ReceivedMsg,
+        num_beacons: u8,
     ) {
-        for result in self.listened_msg.iter() {
-            println!("Listened msg: {:?}", result);
-            // Additional logic to handle listened messages would go here
-            if result.len() >= (num_field+3).try_into().unwrap() {
-                let ack = received_ack_from_list(result[num_field+3..].to_vec()); // Parse acknowledgments
-                for a in ack {
-                    let log_entry = format!("Received ACK from node {} of {} message\n", a.node_id, a.nmsg);
-                    println!("{}", log_entry);
-                    info!("{}", log_entry);
-                    sent_manage.add_nodeid_to_message(a.nmsg, a.node_id, num_beacons); // Update sent message manager with acknowledgments
-                }
-                self.received_acks.push(MsgReceivedAck::new(result[0], result[1])); // Store received acknowledgment
-            }else{
-                print!("No ack\n");
-            }
-        }
+
+        // TODO: implement!!
+
+        
+        // for result in self.listened_msg.iter() {
+        //     println!("Listened msg: {:?}", result);
+        //     // Additional logic to handle listened messages would go here
+        //     if result.len() >= (num_field+3).try_into().unwrap() {
+        //         let ack = received_ack_from_list(result[num_field+3..].to_vec()); // Parse acknowledgments
+        //         for a in ack {
+        //             let log_entry = format!("Received ACK from node {} of {} message\n", a.node_id, a.nmsg);
+        //             println!("{}", log_entry);
+        //             info!("{}", log_entry);
+        //             self.add_nodeid_to_message(a.nmsg, a.node_id, num_beacons); // Update sent message manager with acknowledgments
+        //         }
+        //         self.received_acks.push(MsgReceivedAck::new(result[0], result[1])); // Store received acknowledgment
+        //     }else{
+        //         print!("No ack\n");
+        //     }
+        // }
 
     }
     
