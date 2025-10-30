@@ -6,7 +6,7 @@ use crate::seatrac::enums::{self}; // Replace with actual path
 use hex;
 use std::error::Error;
 use std::io;
-use crate::seatrac::structs::{SETTINGS_T, XCVR_USBL, XCVR_BASELINES};
+// use crate::seatrac::structs::{SETTINGS_T, XCVR_USBL, XCVR_BASELINES};
 
 
 const CRC_POLY: u16 = 0xA001; // CRC polynomial for checksum calculation

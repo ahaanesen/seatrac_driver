@@ -1,10 +1,10 @@
 use std::{mem, thread::sleep, time::{Duration, SystemTime, UNIX_EPOCH}};
 use crate::{comms::{ack_manager::{SentMessage, SentMsgManager}, 
-                dccl::{self, encode_input}, 
+                dccl, 
                 message_types::{self, NewMsg, PositionalCoordinates}, 
                 tdma_utils}, 
             modem_driver::ModemDriver, 
-            seatrac::{helpers::calculate_propagation_time, structs::DAT_RECEIVE}}; // Adjust the path based on the actual location of ModemDriver
+            seatrac::{structs::DAT_RECEIVE}}; // Adjust the path based on the actual location of ModemDriver
 
 pub struct TdmaScheduler {
     pub total_slots: u8,
@@ -85,6 +85,8 @@ impl TdmaScheduler {
 
         }
     }
+
+    // move into other module 
     pub fn receive_message(&self, modem: &mut dyn ModemDriver) -> Result<(message_types::ReceivedMsg, Option<message_types::UsblData>), Box<dyn std::error::Error>> {
         let mut received_msg = message_types::ReceivedMsg::new_empty();
         let mut usbl_data: Option<message_types::UsblData> = Some(message_types::UsblData::new(0, vec![0], 0, 0, 0));
@@ -98,8 +100,8 @@ impl TdmaScheduler {
 
         // parse response with modem.message_in()
         let (message_type, recieved_bytes) = modem.message_in(&received_serial)?;
-        match message_type.as_str() {
-            "CID_DAT_RECEIVE" => {
+        match message_type.as_str() { // Can match on other message types here also, if many, might want to switch to a hashmap instead
+            "CID_DAT_RECEIVE" => { // TODO: move functionality under to driver module
                 // now make dat_recieve message!
                 let dat_receive = DAT_RECEIVE::from_bytes(recieved_bytes)?;
                 // check local flag

@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use crate::modem_driver::ModemDriver;
 use crate::seatrac::enums::{self, CID_E, CST_E};
 use crate::seatrac::ascii_message::{make_command, parse_response, make_command_u16};
-use crate::seatrac::helpers::calculate_propagation_time;
+// use crate::seatrac::helpers::calculate_propagation_time;
 use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPONSE, XCVR_FLAGS};
 
 

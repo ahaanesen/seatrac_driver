@@ -1,6 +1,6 @@
 use rclrs::*;
 use std::{thread::{self, sleep}, time::Duration};
-use std_msgs::msg::String as StringMsg;
+// use std_msgs::msg::String as StringMsg;
 
 mod modem_driver;
 mod seatrac;
@@ -19,7 +19,7 @@ fn main() -> Result<(), RclrsError> {
         panic!("Failed to load communication configuration: {}", e);
     });
     // TODO: nb - should have beacon_id=node_id in driver and comms config
-    let tdmaScheduler = comms::tdma_scheduler::TdmaScheduler::new(
+    let tdma_scheduler = comms::tdma_scheduler::TdmaScheduler::new(
         comms_config.beacons_in_network,
         comms_config.tdma_slot_duration_s,
         comms_config.node_id,
@@ -62,16 +62,16 @@ fn main() -> Result<(), RclrsError> {
         let mut ack_handler = SentMsgManager::new();
         loop {
 
-            if tdmaScheduler.is_my_slot() {
+            if tdma_scheduler.is_my_slot() {
                 // SEND SLOT
                 let slot_acks = ack_handler.initialize_ack_slot();
-                tdmaScheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler, &slot_acks, comms_config.propagation_time); // TODO: remove ack_handler from here?
+                tdma_scheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler, &slot_acks, comms_config.propagation_time); // TODO: remove ack_handler from here?
 
                 // Send queued messages from ROS
                 // TODO: still missing implementation
                 let mut send_queue = queues.to_modem.lock().unwrap();
                 for msg in send_queue.drain(..) {
-                    if tdmaScheduler.get_slot_after_propag(ack_handler.wait_time) != tdmaScheduler.assigned_slot {
+                    if tdma_scheduler.get_slot_after_propag(ack_handler.wait_time) != tdma_scheduler.assigned_slot {
                         println!("Not enough time to send new message, skipping.");
                         break;
                     }
@@ -83,15 +83,15 @@ fn main() -> Result<(), RclrsError> {
                 }
 
                 // Resend logic
-                let next_slot = tdmaScheduler.get_slot_after_propag(ack_handler.wait_time);
-                if  !ack_handler.is_empty() && next_slot == tdmaScheduler.assigned_slot {
-                    tdmaScheduler.resend_messages(&mut modem, &mut ack_handler, &slot_acks, comms_config.propagation_time);
+                let next_slot = tdma_scheduler.get_slot_after_propag(ack_handler.wait_time);
+                if  !ack_handler.is_empty() && next_slot == tdma_scheduler.assigned_slot {
+                    tdma_scheduler.resend_messages(&mut modem, &mut ack_handler, &slot_acks, comms_config.propagation_time);
                 }
 
             } else {
                 // RECEIVING SLOT
                 //let mut listened_msgs: Vec<message_types::ReceivedMsg> = vec![];
-                match tdmaScheduler.receive_message(&mut modem) {
+                match tdma_scheduler.receive_message(&mut modem) {
                     Ok((received_msg, usbl_data)) => {
                         // Handle acks and send to ros2 network
                         println!("Received message at t={}: msg {:?}", received_msg.t_received, received_msg.message_index);
@@ -105,9 +105,12 @@ fn main() -> Result<(), RclrsError> {
                             queues.from_modem.lock().unwrap().push(format!("Received USBL data: {:?}", usbl)); // To ROS2 network
                         }
 
+                        // changed structure compared to Lisas version, handling acks directly, not storing listened messages
+                        ack_handler.listened_msg.push(received_msg.clone()); // TODO: might want to batch process acks instead of handling one by one?
+
                         ack_handler.handle_acknowledgments(received_msg, comms_config.beacons_in_network);
                     }
-                    Err(_e) => {
+                    Err(_e) => { // TODO: return timeout instead of error
                         //eprintln!("Error receiving message: {}", e);
                         continue;
                     }
