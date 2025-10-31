@@ -1,0 +1,16 @@
+syntax = "proto2";
+import "dccl/option_extensions.proto"; 
+
+message Payload {
+  option (dccl.msg) = { codec_version: 4
+                        id: 124
+                        max_bytes: 64 };
+
+  required int32 node_id = 1 [(dccl.field) = { min: 0 max: 10000 precision: 1 }];
+  required int32 msg_idx = 2 [(dccl.field) = { min: 0 max: 10000 precision: 1 }];
+  required double x = 3 [(dccl.field) = { min: 0 max: 255 precision: 1 }];
+  required double y = 4 [(dccl.field) = { min: 0 max: 255 precision: 1 }];
+  required double z = 5 [(dccl.field) = { min: 0 max: 255 precision: 1 }];
+  required double t = 6 [(dccl.field) = { min: 0 max: 4500 precision: 1 }];
+  repeated int32 ack = 7 [(dccl.field) = { min: -10000 max: 10000 max_repeat: 20 }];
+}

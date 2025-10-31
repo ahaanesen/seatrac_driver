@@ -43,27 +43,6 @@ impl AMSGTYPE_E {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum APAYLOAD_E { // Acoustic Payload Identifier (APAYLOAD_E)
-    PLOAD_PING = 0x0,
-    PLOAD_ECHO = 0x1,
-    PLOAD_NAV = 0x2,
-    PLOAD_DAT = 0x3,
-    PLOAD_DEX = 0x4,
-}
-
-impl APAYLOAD_E {
-    pub fn from_u8(value: u8) -> Option<Self> {
-        match value {
-            0x0 => Some(APAYLOAD_E::PLOAD_PING),
-            0x1 => Some(APAYLOAD_E::PLOAD_ECHO),
-            0x2 => Some(APAYLOAD_E::PLOAD_NAV),
-            0x3 => Some(APAYLOAD_E::PLOAD_DAT),
-            0x4 => Some(APAYLOAD_E::PLOAD_DEX),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BAUDRATE_E { // Serial Port Baud Rate
@@ -180,33 +159,6 @@ impl BID_E {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CAL_ACTION_E { // CalibrationAction
-    CAL_ACC_DEFAULTS = 0x00,
-    CAL_ACC_RESET = 0x01,
-    CAL_ACC_CALC = 0x02,
-    CAL_MAG_DEFAULTS = 0x03,
-    CAL_MAG_RESET = 0x04,
-    CAL_MAG_CALC = 0x05,
-    CAL_PRES_OFFSET_RESET = 0x06,
-    CAL_PRES_OFFSET_CALC = 0x07,
-}
-
-impl CAL_ACTION_E {
-    pub fn from_u8(value: u8) -> Option<Self> {
-        match value {
-            0x00 => Some(CAL_ACTION_E::CAL_ACC_DEFAULTS),
-            0x01 => Some(CAL_ACTION_E::CAL_ACC_RESET),
-            0x02 => Some(CAL_ACTION_E::CAL_ACC_CALC),
-            0x03 => Some(CAL_ACTION_E::CAL_MAG_DEFAULTS),
-            0x04 => Some(CAL_ACTION_E::CAL_MAG_RESET),
-            0x05 => Some(CAL_ACTION_E::CAL_MAG_CALC),
-            0x06 => Some(CAL_ACTION_E::CAL_PRES_OFFSET_RESET),
-            0x07 => Some(CAL_ACTION_E::CAL_PRES_OFFSET_CALC),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CID_E { // Command Identification Codes

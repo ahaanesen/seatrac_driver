@@ -19,45 +19,7 @@ variables placed under one name in a block of memory.
 For the scope of this document, the members (or fields) of Structures should be assumed to be defined sequentially
 in memory, with no additional packing bytes added. */
 
-use crate::seatrac::enums::{self, AMSGTYPE_E, APAYLOAD_E, BAUDRATE_E}; // Import enums from seatrac_enums.rs
-
-
-#[derive(Debug, Clone)]
-pub struct ACOMSG_T { // Acoustic Message
-    pub msg_dest_id: u8,
-    pub msg_src_id: u8,
-    pub msg_type: AMSGTYPE_E,
-    pub msg_depth: u16,
-    pub msg_payload_id: APAYLOAD_E,
-    pub msg_payload_len: u8,
-    pub msg_payload: [u8; 31],
-}
-
-impl ACOMSG_T {
-    pub fn new(
-        msg_dest_id: u8,
-        msg_src_id: u8,
-        msg_type: AMSGTYPE_E,
-        msg_depth: u16,
-        msg_payload_id: APAYLOAD_E,
-        msg_payload: &[u8],
-    ) -> Self {
-        let mut msg_payload_array = [0; 31];
-        for (i, &item) in msg_payload.iter().enumerate() {
-            msg_payload_array[i] = item;
-        }
-
-        Self {
-            msg_dest_id,
-            msg_src_id,
-            msg_type,
-            msg_depth,
-            msg_payload_id,
-            msg_payload_len: msg_payload.len() as u8,
-            msg_payload: msg_payload_array,
-        }
-    }
-}
+use crate::seatrac::enums::{self, AMSGTYPE_E, BAUDRATE_E}; // Import enums from seatrac_enums.rs
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,113 +55,112 @@ pub struct ACOFIX_T { // Acoustic Position and Range Fix Summary
 
 impl ACOFIX_T {
     pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+        use std::convert::TryInto;
+
+        // Minimum base size: 16 bytes (fields up to rssi)
         if data.len() < 16 {
             return Err("Buffer too short to parse ACOFIX_T".into());
         }
 
-        let dest_id = data[0];
-        let src_id = data[1];
-        let flags = ACOFIX_FLAGS::from_bits_truncate(data[2]);
-        let msg_type = AMSGTYPE_E::from_u8(data[3]).ok_or("Invalid AMSGTYPE_E value")?;
-        let attitude_yaw = i16::from_le_bytes(data[4..6].try_into()?);
-        let attitude_pitch = i16::from_le_bytes(data[6..8].try_into()?);
-        let attitude_roll = i16::from_le_bytes(data[8..10].try_into()?);
+        let mut offset: usize = 0;
+        let dest_id = data[offset]; offset += 1;
+        let src_id = data[offset]; offset += 1;
+        let flags = ACOFIX_FLAGS::from_bits_truncate(data[offset]); offset += 1;
+        let msg_type = AMSGTYPE_E::from_u8(data[offset]).ok_or("Invalid AMSGTYPE_E value")?; offset += 1;
 
-        let depth_local = u16::from_le_bytes(data[10..12].try_into()?);
-        let vos = u16::from_le_bytes(data[12..14].try_into()?);
-        let rssi = i16::from_le_bytes(data[14..16].try_into()?);
-        
-        let mut offset = 16;
-
-        let range_count = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
-            let value = u32::from_le_bytes(data[offset..offset + 4].try_into()?);
-            offset += 4;
-            Some(value)
-        } else {
-            None
+        // helper closures that validate bounds before reading
+        let mut read_u16 = |buf: &[u8], off: &mut usize| -> Result<u16, Box<dyn std::error::Error>> {
+            if *off + 2 > buf.len() { return Err("Buffer too short while reading u16".into()); }
+            let v = u16::from_le_bytes(buf[*off..*off+2].try_into()?);
+            *off += 2;
+            Ok(v)
+        };
+        let mut read_i16 = |buf: &[u8], off: &mut usize| -> Result<i16, Box<dyn std::error::Error>> {
+            if *off + 2 > buf.len() { return Err("Buffer too short while reading i16".into()); }
+            let v = i16::from_le_bytes(buf[*off..*off+2].try_into()?);
+            *off += 2;
+            Ok(v)
+        };
+        let mut read_u32 = |buf: &[u8], off: &mut usize| -> Result<u32, Box<dyn std::error::Error>> {
+            if *off + 4 > buf.len() { return Err("Buffer too short while reading u32".into()); }
+            let v = u32::from_le_bytes(buf[*off..*off+4].try_into()?);
+            *off += 4;
+            Ok(v)
+        };
+        let mut read_i32 = |buf: &[u8], off: &mut usize| -> Result<i32, Box<dyn std::error::Error>> {
+            if *off + 4 > buf.len() { return Err("Buffer too short while reading i32".into()); }
+            let v = i32::from_le_bytes(buf[*off..*off+4].try_into()?);
+            *off += 4;
+            Ok(v)
         };
 
-        let range_time = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
-            let value = i32::from_le_bytes(data[offset..offset + 4].try_into()?);
-            offset += 4;
-            Some(value)
-        } else {
-            None
-        };
+        let attitude_yaw = read_i16(data, &mut offset)?;
+        let attitude_pitch = read_i16(data, &mut offset)?;
+        let attitude_roll = read_i16(data, &mut offset)?;
 
-        let range_dist = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
-            let value = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
-        };
+        let depth_local = read_u16(data, &mut offset)?;
+        let vos = read_u16(data, &mut offset)?;
+        let rssi = read_i16(data, &mut offset)?;
 
-        let usbl_channels = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
-            let value = data[offset];
-            offset += 1;
-            Some(value)
-        } else {
-            None
-        };
-
-        let usbl_rssi = if let Some(channels) = usbl_channels {
-            let mut rssi = Vec::new();
-            for _ in 0..channels {
-                rssi.push(i16::from_le_bytes(data[offset..offset + 2].try_into()?));
-                offset += 2;
+        // Range fields (present only if RANGE_VALID)
+        let (range_count, range_time, range_dist) = if flags.contains(ACOFIX_FLAGS::RANGE_VALID) {
+            // ensure we have 4 + 4 + 2 bytes available
+            if offset + 10 > data.len() {
+                return Err("Buffer too short for RANGE fields".into());
             }
-            Some(rssi)
+            let rc = read_u32(data, &mut offset)?;
+            let rt = read_i32(data, &mut offset)?;
+            let rd = read_u16(data, &mut offset)?;
+            (Some(rc), Some(rt), Some(rd))
         } else {
-            None
+            (None, None, None)
         };
 
-        let usbl_azimuth = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
-        };
+        // USBL block (channels + per-channel RSSI + azimuth + elevation + fit_error)
+        let (usbl_channels, usbl_rssi, usbl_azimuth, usbl_elevation, usbl_fit_error) =
+            if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
+                // Need at least 1 (channels) + 2 (azimuth) + 2 (elevation) + 2 (fit_error) = 7 bytes
+                if offset + 7 > data.len() {
+                    return Err("Buffer too short for USBL header fields".into());
+                }
+                let channels = data[offset]; offset += 1;
+                // Now ensure channels * 2 bytes available for rssi
+                let needed = (channels as usize).saturating_mul(2);
+                if offset + needed + 6 - 1 > data.len() + 0 { /* no-op to keep logic readable */ }
+                if offset + needed + 6 - 1 > data.len() {
+                    // compute exact remaining bytes required:
+                    // already accounted: channels (1) removed; remaining expected: channels*2 + az(2)+el(2)+fit(2)
+                    return Err("Buffer too short for USBL channels + RSSI + angles".into());
+                }
 
-        let usbl_elevation = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
-        };
+                // Safely read per-channel RSSI
+                let mut rssi_vec: Vec<i16> = Vec::new();
+                for _ in 0..channels {
+                    if offset + 2 > data.len() { return Err("Buffer too short while reading USBL rssi".into()); }
+                    rssi_vec.push(i16::from_le_bytes(data[offset..offset+2].try_into()?));
+                    offset += 2;
+                }
 
-        let usbl_fit_error = if flags.contains(ACOFIX_FLAGS::USBL_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
-        };
+                // azimuth, elevation, fit_error
+                let az = read_i16(data, &mut offset)?;
+                let el = read_i16(data, &mut offset)?;
+                let fit = read_i16(data, &mut offset)?;
+                (Some(channels), Some(rssi_vec), Some(az), Some(el), Some(fit))
+            } else {
+                (None, None, None, None, None)
+            };
 
-        let position_easting = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
+        // Position fields (easting, northing, depth) present if POSITION_VALID
+        let (position_easting, position_northing, position_depth) = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
+            if offset + 6 > data.len() {
+                return Err("Buffer too short for POSITION fields".into());
+            }
+            let pe = read_i16(data, &mut offset)?;
+            let pn = read_i16(data, &mut offset)?;
+            let pd = read_i16(data, &mut offset)?;
+            (Some(pe), Some(pn), Some(pd))
         } else {
-            None
-        };
-
-        let position_northing = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
-        };
-
-        let position_depth = if flags.contains(ACOFIX_FLAGS::POSITION_VALID) {
-            let value = i16::from_le_bytes(data[offset..offset + 2].try_into()?);
-            offset += 2;
-            Some(value)
-        } else {
-            None
+            (None, None, None)
         };
 
         Ok(Self {
@@ -257,157 +218,6 @@ pub struct AHRSCAL_T { // AHRS Calibration Coefficients
 
 // XCVR_FIX payload is ACOFIX_T
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct XCVR_USBL {
-    pub xcor_sig_peakfloat: f32,
-    pub xcor_threshold: f32,
-    pub xcor_cross_point: u16,
-    pub xcor_cross_mag: f32,
-    pub xcor_detect: u16,
-    pub xcor_length: u16,
-    pub xcor_data: Vec<f32>,
-    pub channels: u8,
-    pub channel_rssi: Vec<i16>,
-    pub baselines: u8,
-    pub phase_angle: Vec<f32>,
-    pub signal_azimuth: i16,
-    pub signal_elevation: i16,
-    pub signal_fit_error: f32,
-    pub beacon_dest_id: enums::BID_E,
-    pub beacon_src_id: enums::BID_E,
-}
-impl XCVR_USBL {
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-
-        if data.len() < 20 {
-            return Err("Buffer too short to parse XCVR_USBL".into());
-        }
-
-        let xcor_sig_peakfloat = f32::from_le_bytes(data[0..4].try_into()?);
-        let xcor_threshold = f32::from_le_bytes(data[4..8].try_into()?);
-        let xcor_cross_point = u16::from_le_bytes(data[8..10].try_into()?);
-        let xcor_cross_mag = f32::from_le_bytes(data[10..14].try_into()?);
-        let xcor_detect = u16::from_le_bytes(data[14..16].try_into()?);
-        let xcor_length = u16::from_le_bytes(data[16..18].try_into()?);
-
-        let num_floats = (xcor_length as usize).min((data.len() - 18) / 4);
-        let mut xcor_data = Vec::with_capacity(num_floats);
-        for i in 0..num_floats {
-            let start = 18 + i * 4;
-            let end = start + 4;
-            if end <= data.len() {
-                xcor_data.push(f32::from_le_bytes(data[start..end].try_into()?));
-            }
-        }
-
-        // After xcor_data, we have channels and channel_rssi
-        let offset_after_xcor = 18 + num_floats * 4;
-        if offset_after_xcor + 1 > data.len() {
-            return Err("Buffer too short to read channels".into());
-        }
-        let channels = data[offset_after_xcor];
-        let mut channel_rssi = Vec::with_capacity(channels as usize);
-        for i in 0..channels {
-            let start = offset_after_xcor + 1 + (i as usize) * 2;
-            let end = start + 2;
-            if end <= data.len() {
-                channel_rssi.push(i16::from_le_bytes(data[start..end].try_into()?));
-            }
-        }
-
-        // After channel_rssi, we have baselines and phase_angle
-        let offset_after_rssi = offset_after_xcor + 1 + (channels as usize) * 2;
-        if offset_after_rssi + 1 > data.len() {
-            return Err("Buffer too short to read baselines count".into());
-        }
-        let baselines = data[offset_after_rssi];
-        let mut phase_angle: Vec<f32> = Vec::with_capacity(baselines as usize);
-        let mut offset_after_phase = offset_after_rssi + 1;
-        // read baselines number of f32 angles
-        for i in 0..(baselines as usize) {
-            let start = offset_after_phase + i * 4;
-            let end = start + 4;
-            if end > data.len() {
-                return Err("Buffer too short to read phase_angle values".into());
-            }
-            phase_angle.push(f32::from_le_bytes(data[start..end].try_into()?));
-        }
-        offset_after_phase += (baselines as usize) * 4;
-
-        // Now read signal azimuth, elevation, fit_error
-        if offset_after_phase + 2 > data.len() {
-            return Err("Buffer too short to read signal_azimuth".into());
-        }
-        let signal_azimuth = i16::from_le_bytes(data[offset_after_phase..offset_after_phase + 2].try_into()?);
-        offset_after_phase += 2;
-        if offset_after_phase + 2 > data.len() {
-            return Err("Buffer too short to read signal_elevation".into());
-        }
-        let signal_elevation = i16::from_le_bytes(data[offset_after_phase..offset_after_phase + 2].try_into()?);
-        offset_after_phase += 2;
-        if offset_after_phase + 4 > data.len() {
-            return Err("Buffer too short to read signal_fit_error".into());
-        }
-        let signal_fit_error = f32::from_le_bytes(data[offset_after_phase..offset_after_phase + 4].try_into()?);
-        offset_after_phase += 4;
-
-        // Finally beacon destination and source IDs (each 1 byte)
-        if offset_after_phase + 2 > data.len() {
-            return Err("Buffer too short to read beacon ids".into());
-        }
-        let beacon_dest_id = enums::BID_E::from_u8(data[offset_after_phase]).ok_or("Invalid BID_E for beacon_dest_id")?;
-        offset_after_phase += 1;
-        let beacon_src_id = enums::BID_E::from_u8(data[offset_after_phase]).ok_or("Invalid BID_E for beacon_src_id")?;
-
-        Ok(Self {
-            xcor_sig_peakfloat,
-            xcor_threshold,
-            xcor_cross_point,
-            xcor_cross_mag,
-            xcor_detect,
-            xcor_length,
-            xcor_data,
-            channels,
-            channel_rssi,
-            baselines,
-            phase_angle,
-            signal_azimuth,
-            signal_elevation,
-            signal_fit_error,
-            beacon_dest_id,
-            beacon_src_id,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct XCVR_BASELINES {
-    pub beacon_src_id: enums::BID_E,
-    pub baseline_count: u8,
-    pub baselines: Vec<f32>,
-}
-impl XCVR_BASELINES {
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        use std::convert::TryInto;
-        if data.len() < 2 {
-            return Err("Buffer too short to parse XCVR_BASELINES".into());
-        }
-        let beacon_src_id = enums::BID_E::from_u8(data[0]).ok_or("Invalid BID_E for beacon_src_id")?;
-        let baseline_count = data[1];
-        let mut baselines: Vec<f32> = Vec::with_capacity(baseline_count as usize);
-        let mut offset: usize = 2;
-        for _ in 0..(baseline_count as usize) {
-            if offset + 4 > data.len() {
-                return Err("Buffer too short to read baseline values".into());
-            }
-            let v = f32::from_le_bytes(data[offset..offset + 4].try_into()?);
-            baselines.push(v);
-            offset += 4;
-        }
-        Ok(Self { beacon_src_id, baseline_count, baselines })
-
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct STATUS_RESPONSE {
@@ -451,150 +261,154 @@ pub struct STATUS_RESPONSE {
     pub ahrs_comp_gyro_z: Option<f32>, // AHRS_COMP_GYRO_Z
 }
 impl STATUS_RESPONSE {
-    pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+    // Replace STATUS_RESPONSE::from_bytes body with the following:
 
-        let mut offset = 0;
+pub fn from_bytes(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+    let mut offset = 0;
 
-        fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, Box<dyn std::error::Error>> {
-            if *offset + 1 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = data[*offset];
-            *offset += 1;
-            Ok(value)
-        }
+    fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, Box<dyn std::error::Error>> {
+        if *offset + 1 > data.len() { return Err("Buffer too short".into()); }
+        let v = data[*offset]; *offset += 1; Ok(v)
+    }
+    fn read_u16(data: &[u8], offset: &mut usize) -> Result<u16, Box<dyn std::error::Error>> {
+        if *offset + 2 > data.len() { return Err("Buffer too short".into()); }
+        let v = u16::from_le_bytes(data[*offset..*offset+2].try_into()?); *offset += 2; Ok(v)
+    }
+    fn read_i16(data: &[u8], offset: &mut usize) -> Result<i16, Box<dyn std::error::Error>> {
+        if *offset + 2 > data.len() { return Err("Buffer too short".into()); }
+        let v = i16::from_le_bytes(data[*offset..*offset+2].try_into()?); *offset += 2; Ok(v)
+    }
+    fn read_u32(data: &[u8], offset: &mut usize) -> Result<u32, Box<dyn std::error::Error>> {
+        if *offset + 4 > data.len() { return Err("Buffer too short".into()); }
+        let v = u32::from_le_bytes(data[*offset..*offset+4].try_into()?); *offset += 4; Ok(v)
+    }
+    fn read_i32(data: &[u8], offset: &mut usize) -> Result<i32, Box<dyn std::error::Error>> {
+        if *offset + 4 > data.len() { return Err("Buffer too short".into()); }
+        let v = i32::from_le_bytes(data[*offset..*offset+4].try_into()?); *offset += 4; Ok(v)
+    }
+    fn read_f32(data: &[u8], offset: &mut usize) -> Result<f32, Box<dyn std::error::Error>> {
+        if *offset + 4 > data.len() { return Err("Buffer too short".into()); }
+        let v = f32::from_le_bytes(data[*offset..*offset+4].try_into()?); *offset += 4; Ok(v)
+    }
+    fn read_u64(data: &[u8], offset: &mut usize) -> Result<u64, Box<dyn std::error::Error>> {
+        if *offset + 8 > data.len() { return Err("Buffer too short".into()); }
+        let v = u64::from_le_bytes(data[*offset..*offset+8].try_into()?); *offset += 8; Ok(v)
+    }
 
-        fn read_u16(data: &[u8], offset: &mut usize) -> Result<u16, Box<dyn std::error::Error>> {
-            if *offset + 2 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = u16::from_le_bytes(data[*offset..*offset + 2].try_into()?);
-            *offset += 2;
-            Ok(value)
-        }
+    let status_output = STATUS_BITS_T::from_bits_truncate(read_u8(data, &mut offset)?);
+    let timestamp = read_u64(data, &mut offset)?;
 
-        fn read_i16(data: &[u8], offset: &mut usize) -> Result<i16, Box<dyn std::error::Error>> {
-            if *offset + 2 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = i16::from_le_bytes(data[*offset..*offset + 2].try_into()?);
-            *offset += 2;
-            Ok(value)
-        }
+    // Environment block
+    let (env_supply, env_temp, env_pressure, env_depth, env_vos) = if status_output.contains(STATUS_BITS_T::ENVIRONMENT) {
+        (Some(read_u16(data, &mut offset)?),
+         Some(read_i16(data, &mut offset)?),
+         Some(read_i32(data, &mut offset)?),
+         Some(read_i32(data, &mut offset)?),
+         Some(read_u16(data, &mut offset)?))
+    } else {
+        (None, None, None, None, None)
+    };
 
-        fn read_u32(data: &[u8], offset: &mut usize) -> Result<u32, Box<dyn std::error::Error>> {
-            if *offset + 4 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = u32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
-            *offset += 4;
-            Ok(value)
-        }
+    // Attitude block
+    let (att_yaw, att_pitch, att_roll) = if status_output.contains(STATUS_BITS_T::ATTITUDE) {
+        (Some(read_i16(data, &mut offset)?),
+         Some(read_i16(data, &mut offset)?),
+         Some(read_i16(data, &mut offset)?))
+    } else {
+        (None, None, None)
+    };
 
-        fn read_i32(data: &[u8], offset: &mut usize) -> Result<i32, Box<dyn std::error::Error>> {
-            if *offset + 4 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = i32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
-            *offset += 4;
-            Ok(value)
-        }
+    // Magnetometer calibration block
+    let (mag_cal_buf, mag_cal_valid, mag_cal_age, mag_cal_fit) = if status_output.contains(STATUS_BITS_T::MAG_CAL) {
+        (Some(read_u8(data, &mut offset)?),
+         Some(read_u8(data, &mut offset)? != 0),
+         Some(read_u32(data, &mut offset)?),
+         Some(read_u8(data, &mut offset)?))
+    } else {
+        (None, None, None, None)
+    };
 
-        fn read_f32(data: &[u8], offset: &mut usize) -> Result<f32, Box<dyn std::error::Error>> {
-            if *offset + 4 > data.len() {
-                return Err("Buffer too short".into());
-            }
-            let value = f32::from_le_bytes(data[*offset..*offset + 4].try_into()?);
-            *offset += 4;
-            Ok(value)
-        }
+    // Accelerometer calibration limits (ACC_CAL)
+    let (acc_lim_min_x, acc_lim_min_y, acc_lim_min_z, acc_lim_max_x, acc_lim_max_y, acc_lim_max_z) =
+        if status_output.contains(STATUS_BITS_T::ACC_CAL) {
+            (Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?))
+        } else {
+            (None, None, None, None, None, None)
+        };
 
-        let status_output = STATUS_BITS_T::from_bits_truncate(read_u8(data, &mut offset)?);
-        let timestamp = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
+    // AHRS raw block
+    let (ahrs_raw_acc_x, ahrs_raw_acc_y, ahrs_raw_acc_z,
+         ahrs_raw_mag_x, ahrs_raw_mag_y, ahrs_raw_mag_z,
+         ahrs_raw_gyro_x, ahrs_raw_gyro_y, ahrs_raw_gyro_z) =
+        if status_output.contains(STATUS_BITS_T::AHRS_RAW_DATA) {
+            (Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?),
+             Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?), Some(read_i16(data, &mut offset)?))
+        } else {
+            (None, None, None, None, None, None, None, None, None)
+        };
 
-        let env_supply = Some(read_u16(data, &mut offset)?);
-        let env_temp = Some(read_i16(data, &mut offset)?);
-        let env_pressure = Some(read_i32(data, &mut offset)?);
-        let env_depth = Some(read_i32(data, &mut offset)?);
-        let env_vos = Some(read_u16(data, &mut offset)?);
+    // AHRS compensated/fused block (f32s)
+    let (ahrs_comp_acc_x, ahrs_comp_acc_y, ahrs_comp_acc_z,
+         ahrs_comp_mag_x, ahrs_comp_mag_y, ahrs_comp_mag_z,
+         ahrs_comp_gyro_x, ahrs_comp_gyro_y, ahrs_comp_gyro_z) =
+        if status_output.contains(STATUS_BITS_T::AHRS_COMP_DATA) {
+            (Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?),
+             Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?),
+             Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?), Some(read_f32(data, &mut offset)?))
+        } else {
+            (None, None, None, None, None, None, None, None, None)
+        };
 
-        let att_yaw = Some(read_i16(data, &mut offset)?);
-        let att_pitch = Some(read_i16(data, &mut offset)?);
-        let att_roll = Some(read_i16(data, &mut offset)?);
+    Ok(Self {
+        status_output,
+        timestamp,
+        env_supply,
+        env_temp,
+        env_pressure,
+        env_depth,
+        env_vos,
+        att_yaw,
+        att_pitch,
+        att_roll,
+        mag_cal_buf,
+        mag_cal_valid,
+        mag_cal_age,
+        mag_cal_fit,
+        acc_lim_min_x,
+        acc_lim_min_y,
+        acc_lim_min_z,
+        acc_lim_max_x,
+        acc_lim_max_y,
+        acc_lim_max_z,
+        ahrs_raw_acc_x,
+        ahrs_raw_acc_y,
+        ahrs_raw_acc_z,
+        ahrs_raw_mag_x,
+        ahrs_raw_mag_y,
+        ahrs_raw_mag_z,
+        ahrs_raw_gyro_x,
+        ahrs_raw_gyro_y,
+        ahrs_raw_gyro_z,
+        ahrs_comp_acc_x,
+        ahrs_comp_acc_y,
+        ahrs_comp_acc_z,
+        ahrs_comp_mag_x,
+        ahrs_comp_mag_y,
+        ahrs_comp_mag_z,
+        ahrs_comp_gyro_x,
+        ahrs_comp_gyro_y,
+        ahrs_comp_gyro_z,
+    })
+}
 
-        let mag_cal_buf = Some(read_u8(data, &mut offset)?);
-        let mag_cal_valid = Some(read_u8(data, &mut offset)? != 0);
-        let mag_cal_age = Some(read_u32(data, &mut offset)?);
-        let mag_cal_fit = Some(read_u8(data, &mut offset)?);
-
-        let acc_lim_min_x = Some(read_i16(data, &mut offset)?);
-        let acc_lim_min_y = Some(read_i16(data, &mut offset)?);
-        let acc_lim_min_z = Some(read_i16(data, &mut offset)?);
-        let acc_lim_max_x = Some(read_i16(data, &mut offset)?);
-        let acc_lim_max_y = Some(read_i16(data, &mut offset)?);
-        let acc_lim_max_z = Some(read_i16(data, &mut offset)?);
-
-        let ahrs_raw_acc_x = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_acc_y = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_acc_z = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_mag_x = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_mag_y = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_mag_z = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_gyro_x = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_gyro_y = Some(read_i16(data, &mut offset)?);
-        let ahrs_raw_gyro_z = Some(read_i16(data, &mut offset)?);
-
-        let ahrs_comp_acc_x = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_acc_y = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_acc_z = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_mag_x = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_mag_y = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_mag_z = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_gyro_x = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_gyro_y = Some(read_f32(data, &mut offset)?);
-        let ahrs_comp_gyro_z = Some(read_f32(data, &mut offset)?);
-
-        Ok(Self {
-            status_output,
-            timestamp,
-            env_supply,
-            env_temp,
-            env_pressure,
-            env_depth,
-            env_vos,
-            att_yaw,
-            att_pitch,
-            att_roll,
-            mag_cal_buf,
-            mag_cal_valid,
-            mag_cal_age,
-            mag_cal_fit,
-            acc_lim_min_x,
-            acc_lim_min_y,
-            acc_lim_min_z,
-            acc_lim_max_x,
-            acc_lim_max_y,
-            acc_lim_max_z,
-            ahrs_raw_acc_x,
-            ahrs_raw_acc_y,
-            ahrs_raw_acc_z,
-            ahrs_raw_mag_x,
-            ahrs_raw_mag_y,
-            ahrs_raw_mag_z,
-            ahrs_raw_gyro_x,
-            ahrs_raw_gyro_y,
-            ahrs_raw_gyro_z,
-            ahrs_comp_acc_x,
-            ahrs_comp_acc_y,
-            ahrs_comp_acc_z,
-            ahrs_comp_mag_x,
-            ahrs_comp_mag_y,
-            ahrs_comp_mag_z,
-            ahrs_comp_gyro_x,
-            ahrs_comp_gyro_y,
-            ahrs_comp_gyro_z,
-        })
+    pub fn to_string(&self) -> String {
+        format!("{:#?}", self)
     }
 }
 
@@ -1050,18 +864,3 @@ bitflags::bitflags! {
     }
 }
 
-/* 
-Example usage of STATUS_BITS_T:
-fn main() {
-    // Combine flags
-    let status = STATUS_BITS_T::ENVIRONMENT | STATUS_BITS_T::ATTITUDE | STATUS_BITS_T::AHRS_COMP_DATA;
-
-    // Check if a flag is set
-    if status.contains(STATUS_BITS_T::ATTITUDE) {
-        println!("Attitude data will be included.");
-    }
-
-    // Print raw value
-    println!("Raw status byte: 0x{:02X}", status.bits());
-}
- */

@@ -23,7 +23,7 @@ pub trait ModemDriver {
     /// Making a raw byte message of given (dccl encoded) data that the modem can send
     fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8>;
 
-    /// Parses a raw byte message received from the modem into usable (dccl encoded) data
+    /// Parses a raw byte message received from the modem into message type and byte payload
     fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>>;
 
     fn is_usbl(&self) -> bool;

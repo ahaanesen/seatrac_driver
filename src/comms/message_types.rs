@@ -14,19 +14,20 @@ impl NewMsg{
         }
     }
 
-    pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
+    /// Convert the NewMsg struct to bytes for transmission with dccl encoding
+    pub fn to_bytes(&self, node_id: u8, message_index: i32) -> Vec<u8> {
         // Convert the NewMsg struct to bytes for transmission
         // Implement serialization logic here
             let position_string = self.position.to_string();
-            let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", 
+            let status_string = format!("node_id:{} msg_idx:{} {} t:{}", 
                 node_id,
                 message_index,
                 position_string,
-                self.t,
-                acks
+                self.t
             );
             println!("Encoding message: {}", status_string);
-            let packet_data = encode_input(&status_string).expect("Encoding failed");
+            let packet_data = encode_input(&status_string).expect("Encoding failed"); // TODO: only encodes string 
+            println!("Encoded packet data: {:?}", packet_data);
             packet_data
     }
 }

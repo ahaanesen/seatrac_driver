@@ -1,10 +1,10 @@
-use std::{mem, thread::sleep, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{mem, string, thread::sleep, time::{Duration, SystemTime, UNIX_EPOCH}};
 use crate::{comms::{ack_manager::{SentMessage, SentMsgManager}, 
                 dccl, 
                 message_types::{self, NewMsg, PositionalCoordinates}, 
                 tdma_utils}, 
             modem_driver::ModemDriver, 
-            seatrac::{structs::DAT_RECEIVE}}; // Adjust the path based on the actual location of ModemDriver
+            seatrac}; // Adjust the path based on the actual location of ModemDriver
 
 pub struct TdmaScheduler {
     pub total_slots: u8,
@@ -52,8 +52,9 @@ impl TdmaScheduler {
             ack_handler.message_index += 1;
             let new_msg = ack_handler.queue_new_msg.pop_front().expect("Empty queue");
             ack_handler.add_message(ack_handler.message_index, SentMessage::new(new_msg.position, new_msg.t));
-            let dccl_message = new_msg.to_bytes(self.assigned_slot, ack_handler.message_index, slot_acks.clone());
+            let dccl_message = new_msg.to_bytes(self.assigned_slot, ack_handler.message_index);
             let modem_command = modem.message_out(0, &dccl_message);
+            println!("Modem command to send: {:?}", String::from_utf8(modem_command.clone()).unwrap_or("Non-UTF8 data".to_string()));
             ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * propagation_time_ms; // TODO: make func?
             modem.send(&modem_command).unwrap();
         }
@@ -87,28 +88,28 @@ impl TdmaScheduler {
     }
 
     // move into other module 
-    pub fn receive_message(&self, modem: &mut dyn ModemDriver) -> Result<(message_types::ReceivedMsg, Option<message_types::UsblData>), Box<dyn std::error::Error>> {
-        let mut received_msg = message_types::ReceivedMsg::new_empty();
-        let mut usbl_data: Option<message_types::UsblData> = Some(message_types::UsblData::new(0, vec![0], 0, 0, 0));
-
+    /// Checks for incoming messages during non-assigned slots
+    /// Returns a tuple of optional received dat message and USBL data
+    pub fn receive_message(&self, modem: &mut dyn ModemDriver) -> Result<(Option<message_types::ReceivedMsg>, Option<message_types::UsblData>), Box<dyn std::error::Error>> {
+        let mut received_msg = None;
+        let mut usbl_data: Option<message_types::UsblData> = None; // Some(message_types::UsblData::new(0, vec![0], 0, 0, 0));
         // It's not our turn, listen for messages
         let received_serial = match modem.receive() {
             Ok(data) => data,
             Err(e) => return Err(e),
         };
         let t_received = tdma_utils::get_total_seconds();
-
         // parse response with modem.message_in()
         let (message_type, recieved_bytes) = modem.message_in(&received_serial)?;
         match message_type.as_str() { // Can match on other message types here also, if many, might want to switch to a hashmap instead
             "CID_DAT_RECEIVE" => { // TODO: move functionality under to driver module
                 // now make dat_recieve message!
-                let dat_receive = DAT_RECEIVE::from_bytes(recieved_bytes)?;
+                let dat_receive = seatrac::structs::DAT_RECEIVE::from_bytes(recieved_bytes)?;
                 // check local flag
                 if dat_receive.local_flag { // Means that message was sent to this node
                     let encoded_packet = dat_receive.packet_data;
                     let packet_string = dccl::decode_output(&encoded_packet)?;
-                    received_msg = message_types::ReceivedMsg::from_string(&packet_string, t_received)?;
+                    received_msg = Some(message_types::ReceivedMsg::from_string(&packet_string, t_received)?);
 
                     // TODO: can calculate range here?
 
@@ -139,8 +140,20 @@ impl TdmaScheduler {
 
                 }
             },
+            // "CID_STATUS" => {
+            //     // Handle status message if needed
+            //     // println!("Received CID_STATUS message: {:?}", recieved_bytes);
+            //     let _status = seatrac::structs::STATUS_RESPONSE::from_bytes(&recieved_bytes)?;
+            //     // println!("Status: {:?}", status.to_string());
+            // },
+            "CID_DAT_SEND" => {
+                // Can ignore, just if sending dat was sucessfull
+                let status = seatrac::enums::CST_E::from_u8(recieved_bytes[0])
+                    .ok_or_else(|| "Invalid CST_E value")?;
+                println!("Received CID_DAT_SEND message: {:?}", status);
+            }
             _ => {
-                println!("Received unsupported message type: {}", message_type);
+                // println!("Received unsupported message type: {}", message_type);
             }
         }
         // now make dat_recieve message!

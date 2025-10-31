@@ -2,7 +2,8 @@
 // use crate::modem::identifiers::CommandIdentificationCode; // Enum for command identification codes
 // use crate::modem::record::DAT_SEND; // Structure for DAT messages
 // use serialport::SerialPort; // Trait for serial port functionality
-use crate::seatrac::enums::{self}; // Replace with actual path
+use crate::seatrac::enums::{self, CID_E};
+use crate::seatrac::structs; // Replace with actual path
 use hex;
 use std::error::Error;
 use std::io;
@@ -36,6 +37,48 @@ fn calc_crc16(buf: &[u8]) -> u16 {
     crc
 }
 
+
+/// Prepares a message by adding header, CID, payload, and CRC
+/// 
+/// # Arguments
+/// * `cid` - The command identification code for the message
+/// * `msg` - The DAT_SEND structure containing the message data
+/// 
+/// # Returns
+/// * A vector of bytes representing the prepared message
+pub fn prepare_message(cid: CID_E, msg: structs::DAT_SEND) -> Vec<u8> {
+    let mut message = Vec::new(); // Initialize message vector
+    
+    // Add start delimiter
+    message.push(b'#'); // Start of the message
+    
+    // Add Command Identifier (CID) in hexadecimal format
+    let cid_str = format!("{:02X}", cid.to_u8());
+    message.extend_from_slice(cid_str.as_bytes()); // Append CID
+    let dest_str = format!("{:02X}", msg.dest_id as u8);
+    message.extend_from_slice(dest_str.as_bytes()); // Append destination ID
+    let msg_type = format!("{:02X}", msg.msg_type as u8);
+    message.extend_from_slice(msg_type.as_bytes()); // Append message type
+    let msg_length = format!("{:02X}", msg.packet_len as u8);
+    message.extend_from_slice(msg_length.as_bytes()); // Append message length
+    let packet_as_bytes = hex::encode(&msg.packet_data); // Convert packet data to hex
+    message.extend_from_slice(packet_as_bytes.as_bytes()); // Append packet data
+
+    // Convert message content (excluding the start delimiter) to bytes
+    let byte_repr = hex::decode(&message[1..]).unwrap(); // Decode hex representation
+    
+    // Calculate and append CRC16
+    let checksum = calc_crc16(&byte_repr); // Compute checksum
+    let checksum_bytes = checksum.to_le_bytes(); // Convert checksum to bytes
+    let checksum_str = format!("{:02X}{:02X}", checksum_bytes[0], checksum_bytes[1]);
+    message.extend_from_slice(checksum_str.as_bytes()); // Append checksum to message
+    
+    // Add end delimiter
+    message.extend_from_slice(b"\r\n"); // End of the message
+
+    
+    message // Return the prepared message
+}
 
 // From 5.2 Message Format
 /// Create ASCII command message

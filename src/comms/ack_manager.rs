@@ -97,7 +97,7 @@ impl SentMessage {
         // Convert the SentMessage struct to bytes for transmission
         // Implement serialization logic here
         let position_string = self.position.to_string();
-        let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", 
+        let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", // TODO: format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}",
                 node_id,
                 message_index,
                 position_string,

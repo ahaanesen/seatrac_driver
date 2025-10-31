@@ -5,7 +5,7 @@ use std::error::Error;
 use std::io::{Read, Write};
 use crate::modem_driver::ModemDriver;
 use crate::seatrac::enums::{self, CID_E, CST_E};
-use crate::seatrac::ascii_message::{make_command, parse_response, make_command_u16};
+use crate::seatrac::ascii_message::{make_command, make_command_u16, parse_response, prepare_message};
 // use crate::seatrac::helpers::calculate_propagation_time;
 use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPONSE, XCVR_FLAGS};
 
@@ -41,13 +41,15 @@ impl SerialModem {
     /// Waits for a response with a specific CID, returns the payload or timeout error.
     /// Useful for configuration
     fn wait_for_response(&mut self, expected_cid: CID_E, timeout: Duration) -> Result<Vec<u8>, Box<dyn Error>> {
-        println!("Waiting for response: {:?}", expected_cid);
+        // println!("Waiting for response: {:?}", expected_cid);
         let start = Instant::now();
         while start.elapsed() < timeout {
             match self.receive() {
                 Ok(data) => {
+                    // println!("Received data while waiting for response: {:?}", String::from_utf8_lossy(&data));
                     if let Ok((cid, resp_payload, _)) = parse_response(&data) {
                         if cid == expected_cid {
+                            // println!("Received expected response: {:?}", resp_payload);
                             return Ok(resp_payload);
                         }
                     }
@@ -65,6 +67,19 @@ impl SerialModem {
         Err(Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "Timeout waiting for response")))
     }
 
+    // Helper to clamp floats into u8 range safely
+    fn clamp_to_u8(v: f64) -> u8 {
+        if v.is_nan() {
+            return 0;
+        }
+        if v <= 0.0 {
+            0
+        } else if v >= 255.0 {
+            255
+        } else {
+            v as u8
+        }
+    }
 
 }
 
@@ -104,10 +119,10 @@ impl ModemDriver for SerialModem {
     /// Configure both host and beacon via protocol (change baud rate, beacon ID, etc.)
     fn configure(&mut self, usbl: bool, baud_rate: u32, beacon_id: u8, salinity: u16) -> Result<(), Box<dyn Error>> {
         let mut reboot = false;
-
+        println!("Configuring modem: usbl={}, baud_rate={}, beacon_id={}, salinity={}", usbl, baud_rate, beacon_id, salinity);
         // 1. Get current beacon settings
         let get_cmd = make_command(CID_E::CID_SETTINGS_GET, &[]);
-        println!("Sending settings get command: {:?}", String::from_utf8_lossy(&get_cmd));
+        // println!("Sending settings get command: {:?}", String::from_utf8_lossy(&get_cmd));
         self.send(&get_cmd)?;
 
         let get_resp = self.wait_for_response(CID_E::CID_SETTINGS_GET, Duration::from_secs(10))?;
@@ -117,6 +132,10 @@ impl ModemDriver for SerialModem {
         // if usbl {
         //     settings.xcvr_flags |= XCVR_FLAGS::FIX_MSGS | XCVR_FLAGS::BASELINES_MSGS; 
         // } // Not necessary, as DAT_RECIEVE will generate USBL info if on a usbl modem
+
+        settings.status_flags = enums::STATUSMODE_E::STATUS_MODE_MANUAL.to_u8(); // Set to manual mode to control status message contents
+        // TODO: doesnt work yet
+
         let current_baud = settings.uart_main_baud.clone();
         let new_baud = enums::BAUDRATE_E::from_u32(baud_rate).unwrap_or(current_baud.clone());
         if new_baud == current_baud.clone() {
@@ -174,13 +193,15 @@ impl ModemDriver for SerialModem {
     }
 
     fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>> {
+        println!("Getting position for node ID {}", self.node_id);
         // Create a command with the STATUS_BITS_T::ENVIRONMENT flag set
         let environment_flag = STATUS_BITS_T::ENVIRONMENT.bits();
         let get_cmd = make_command(CID_E::CID_STATUS, &[environment_flag]);
+        // println!("Sending status get command: {:?}", String::from_utf8_lossy(&get_cmd));
         self.send(&get_cmd)?;
-        let response = self.wait_for_response(CID_E::CID_STATUS, Duration::from_secs(1))?;
-        let (_cid, payload, _rec_checksum) = parse_response(&response)?;
-        let status = STATUS_RESPONSE::from_bytes(&payload)?;
+        let response_payload = self.wait_for_response(CID_E::CID_STATUS, Duration::from_secs(3))?;
+        //let (_cid, payload, _rec_checksum) = parse_response(&response)?;
+        let status = STATUS_RESPONSE::from_bytes(&response_payload)?;
 
         let z: f64;
         if let Some(env_depth) = status.env_depth {
@@ -194,14 +215,18 @@ impl ModemDriver for SerialModem {
             0 => {
                 let x = 2.0 * t as f64;
                 let y = 5.0 * (0.1 * t as f64).sin();
-                // let z = 4.0 + 0.5 * (0.1 * t as f64).sin();
-                Ok(vec![x as u8, y as u8, z as u8]) // Convert f64 values to u8 for the vector
+                let x_u8 = Self::clamp_to_u8(x);
+                let y_u8 = Self::clamp_to_u8(y);
+                let z_u8 = Self::clamp_to_u8(z);
+                Ok(vec![x_u8, y_u8, z_u8])
             }
             1 => {
                 let x = 2.0 * t as f64; 
                 let y = 20.0 - 4.0 * (0.07 * t as f64).sin();
-                // let z = 4.0 + 0.5 * (0.01 * t as f64).cos();
-                Ok(vec![x as u8, y as u8, z as u8]) // Ensure values are compatible with the vector
+                let x_u8 = Self::clamp_to_u8(x);
+                let y_u8 = Self::clamp_to_u8(y);
+                let z_u8 = Self::clamp_to_u8(z);
+                Ok(vec![x_u8, y_u8, z_u8])
             }
             _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Error: get_position received an invalid node_id"))), // Handle invalid node IDs
         }
@@ -220,12 +245,14 @@ impl ModemDriver for SerialModem {
 
     fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
-        make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
+        // make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
+        prepare_message(CID_E::CID_DAT_SEND, dat_msg)
     }
 
+    // Parses a raw byte message received from the modem into command id and byte payload
     fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
         let (cid, payload, _) = parse_response(data)?;
-        print!("Received {} message", cid.to_string());
+        //print!("Received {} message", cid.to_string());
         // TODO: change to only allow dat_receive?
         Ok((cid.to_string().into(), payload))
     }
