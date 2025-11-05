@@ -83,6 +83,7 @@ fn main() -> Result<(), RclrsError> {
 
             if tdma_scheduler.is_my_slot() {
                 // SEND SLOT
+                println!("\n \n Node {}: It's my slot to send! ", comms_config.node_id);
                 let slot_acks = ack_handler.initialize_ack_slot();
                 tdma_scheduler.broadcast_status_msg(&mut modem, initial_time as u64, &mut ack_handler, &slot_acks, comms_config.propagation_time); // TODO: remove ack_handler from here?
 
@@ -93,10 +94,10 @@ fn main() -> Result<(), RclrsError> {
                     for msg in send_queue.drain(..) {
                         println!("Message from ROS2 to send: {}", msg);
                         if tdma_scheduler.get_slot_after_propag(ack_handler.wait_time) != tdma_scheduler.assigned_slot {
-                            println!("Not enough time to send new message, skipping.");
+                            println!("Not enough time inspeto send new message, skipping.");
                             break;
                         }
-                        println!("Waiting propagation previous message ({} seconds) before sending new message.", ack_handler.wait_time);
+                        // println!("Waiting propagation previous message ({} seconds) before sending new message.", ack_handler.wait_time);
                         sleep(Duration::from_secs(ack_handler.wait_time));
                         // TODO: process message here maybe?
                         // TODO: can implement lisas basic position dat msg as test first?
@@ -104,13 +105,14 @@ fn main() -> Result<(), RclrsError> {
                     }
 
                     // Resend logic
-                    let next_slot = tdma_scheduler.get_slot_after_propag(ack_handler.wait_time);
-                    if  !ack_handler.is_empty() && next_slot == tdma_scheduler.assigned_slot {
-                        tdma_scheduler.resend_messages(&mut modem, &mut ack_handler, &slot_acks, comms_config.propagation_time);
-                    }
+                    // TODO: not tested!
+                    // let next_slot = tdma_scheduler.get_slot_after_propag(ack_handler.wait_time);
+                    // if  !ack_handler.is_empty() && next_slot == tdma_scheduler.assigned_slot {
+                    //     tdma_scheduler.resend_messages(&mut modem, &mut ack_handler, &slot_acks, comms_config.propagation_time);
+                    // }
 
                 }
-
+                println!("\n Node {}: Exiting my send slot. \n\n", comms_config.node_id);
 
             } else {
                 // RECEIVING SLOT

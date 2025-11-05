@@ -4,7 +4,7 @@ use crate::{comms::{ack_manager::{SentMessage, SentMsgManager},
                 message_types::{self, NewMsg, PositionalCoordinates}, 
                 tdma_utils}, 
             modem_driver::ModemDriver, 
-            seatrac}; // Adjust the path based on the actual location of ModemDriver
+            seatrac::{self, structs}}; // Adjust the path based on the actual location of ModemDriver
 
 pub struct TdmaScheduler {
     pub total_slots: u8,
@@ -67,7 +67,7 @@ impl TdmaScheduler {
         for (index, message) in ack_handler.list_messages() {
             if index != ack_handler.message_index { // Don't resend the just sent message
                 // Wait before resending the message
-                println!("Waiting propagation previous message ({} milliseconds) before resending.", ack_handler.wait_time);
+                // println!("Waiting propagation previous message ({} milliseconds) before resending.", ack_handler.wait_time);
                 sleep(Duration::from_millis(ack_handler.wait_time));
 
                 let dccl_message = message.to_bytes(self.assigned_slot, index, slot_acks.clone());
@@ -101,15 +101,23 @@ impl TdmaScheduler {
         let t_received = tdma_utils::get_total_seconds();
         // parse response with modem.message_in()
         let (message_type, recieved_bytes) = modem.message_in(&received_serial)?;
+        // println!("Received message type: {}", message_type.as_str());
         match message_type.as_str() { // Can match on other message types here also, if many, might want to switch to a hashmap instead
             "CID_DAT_RECEIVE" => { // TODO: move functionality under to driver module
                 // now make dat_recieve message!
-                let dat_receive = seatrac::structs::DAT_RECEIVE::from_bytes(recieved_bytes)?;
+                // println!("Parsing DAT RECEIVE: {:?}", &recieved_bytes);
+                let dat_receive = structs::DAT_RECEIVE::from_bytes(recieved_bytes)?;
+                // let acofix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                println!("DAT_RECEIVE structure: {:?}", dat_receive);
+                //println!("ACOFIX structure: {:?}", acofix);
                 // check local flag
                 if dat_receive.local_flag { // Means that message was sent to this node
                     let encoded_packet = dat_receive.packet_data;
                     let packet_string = dccl::decode_output(&encoded_packet)?;
-                    received_msg = Some(message_types::ReceivedMsg::from_string(&packet_string, t_received)?);
+                    println!("Decoded packet data: {:?}", packet_string);
+                    let rec = message_types::ReceivedMsg::from_string(&packet_string, t_received)?; // TODO: stops here!!
+                    println!("made recieved message struct: {:?}", rec);
+                    received_msg = Some(rec);
 
                     // TODO: can calculate range here?
 
@@ -117,7 +125,8 @@ impl TdmaScheduler {
 
                     // If a broadcased message is read by a usbl modem
                     if modem.is_usbl() {
-                        let aco_fix = dat_receive.aco_fix;
+                    let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                    // let aco_fix = dat_receive.aco_fix;
                     usbl_data = Some(message_types::UsblData::new(
                         aco_fix.usbl_channels.unwrap_or(0),
                         aco_fix.usbl_rssi.unwrap_or(vec![0]),
@@ -129,7 +138,8 @@ impl TdmaScheduler {
 
                 } else if !dat_receive.local_flag && modem.is_usbl() { // Assumes all messages are not broadcasted!
                     // Handle USBL specific logic here
-                    let aco_fix = dat_receive.aco_fix;
+                    let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                    // let aco_fix = dat_receive.aco_fix;
                     usbl_data = Some(message_types::UsblData::new(
                         aco_fix.usbl_channels.unwrap_or(0),
                         aco_fix.usbl_rssi.unwrap_or(vec![0]),
@@ -153,7 +163,7 @@ impl TdmaScheduler {
                 println!("Received CID_DAT_SEND message: {:?}", status);
             }
             _ => {
-                // println!("Received unsupported message type: {}", message_type);
+                println!("Received unsupported message type: {}", message_type);
             }
         }
         // now make dat_recieve message!

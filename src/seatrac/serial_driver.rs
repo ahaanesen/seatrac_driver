@@ -5,7 +5,7 @@ use std::error::Error;
 use std::io::{Read, Write};
 use crate::modem_driver::ModemDriver;
 use crate::seatrac::enums::{self, CID_E, CST_E};
-use crate::seatrac::ascii_message::{make_command, make_command_u16, parse_response, prepare_message};
+use crate::seatrac::ascii_message::{make_command, make_command_u16, parse_message, parse_response, prepare_message};
 // use crate::seatrac::helpers::calculate_propagation_time;
 use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPONSE, XCVR_FLAGS};
 
@@ -132,8 +132,8 @@ impl ModemDriver for SerialModem {
         // if usbl {
         //     settings.xcvr_flags |= XCVR_FLAGS::FIX_MSGS | XCVR_FLAGS::BASELINES_MSGS; 
         // } // Not necessary, as DAT_RECIEVE will generate USBL info if on a usbl modem
-
         settings.status_flags = enums::STATUSMODE_E::STATUS_MODE_MANUAL.to_u8(); // Set to manual mode to control status message contents
+        settings.status_mode = enums::STATUSMODE_E::STATUS_MODE_MANUAL; // Set to manual mode to control status message contents
         // TODO: doesnt work yet
 
         let current_baud = settings.uart_main_baud.clone();
@@ -245,16 +245,18 @@ impl ModemDriver for SerialModem {
 
     fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
+        println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
+        println!("{:?}", dat_msg);
         // make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
         prepare_message(CID_E::CID_DAT_SEND, dat_msg)
     }
 
     // Parses a raw byte message received from the modem into command id and byte payload
     fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
-        let (cid, payload, _) = parse_response(data)?;
-        //print!("Received {} message", cid.to_string());
+        let (cid, _payload, _checksum, byte_representation) = parse_message(data.to_vec())?;
+        // println!("Received {} message", cid.to_string());
         // TODO: change to only allow dat_receive?
-        Ok((cid.to_string().into(), payload))
+        Ok((cid.to_string().into(), byte_representation))
     }
 
     fn is_usbl(&self) -> bool {

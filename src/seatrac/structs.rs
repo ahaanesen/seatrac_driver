@@ -447,29 +447,42 @@ impl DAT_SEND{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DAT_RECEIVE {
-    //pub msg_id: CID_E,
-    pub aco_fix: ACOFIX_T,
+    // pub aco_fix: ACOFIX_T,
+    pub aco_fix: Vec<u8>,
     pub ack_flag: bool,
     pub packet_len: u8,
     pub packet_data: Vec<u8>,
-    pub local_flag: bool
+    pub local_flag: bool,
 }
 
 impl DAT_RECEIVE {
     pub fn from_bytes(received: Vec<u8>) -> Result<DAT_RECEIVE, Box<dyn std::error::Error>> {
-        let pac_len = received[18];
+        let pac_len = received[33];
         let n_us = usize::try_from(pac_len).unwrap();
-        let aco_fix = ACOFIX_T::from_bytes(&received[1..17])?;
+        // let aco_fix = ACOFIX_T::from_bytes(&received[1..17])?;
+        let aco_fix = received[1..32].to_vec();
         let dat_receive = DAT_RECEIVE {
             // msg_id: CID_E::CID_DAT_RECEIVE,
             aco_fix,
-            ack_flag: u8_to_bool(received[17]),
-            packet_len: received[18],
-            packet_data: received[19..(19 + n_us)].to_vec(),
-            local_flag: u8_to_bool(received[19 + n_us]),
+            ack_flag: u8_to_bool(received[32]),
+            packet_len: pac_len,
+            packet_data: received[34..(34 + n_us)].to_vec(),
+            local_flag: u8_to_bool(received[34 + n_us ]),
         };
         Ok(dat_receive)
     }
+    // pub fn from_bytes(received: Vec<u8>) -> DAT_RECEIVE {
+    //     let pac_len = received[18];
+    //     let n_us = usize::try_from(pac_len).unwrap();
+    //     let dat_send_str = DAT_RECEIVE {
+    //         aco_fix: received[1..17].to_vec(),
+    //         ack_flag: u8_to_bool(received[17]),
+    //         packet_len: received[18],
+    //         packet_data: received[19..(19+n_us)].to_vec(),
+    //         local_flag: u8_to_bool(received[19+n_us])
+    //     };
+    //     dat_send_str
+    // }
 }
 
 pub fn u8_to_bool(v: u8)->bool{

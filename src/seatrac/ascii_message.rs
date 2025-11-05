@@ -37,7 +37,7 @@ fn calc_crc16(buf: &[u8]) -> u16 {
     crc
 }
 
-
+// From Lisa
 /// Prepares a message by adding header, CID, payload, and CRC
 /// 
 /// # Arguments
@@ -201,72 +201,36 @@ pub fn parse_response(msg: &[u8]) -> Result<(enums::CID_E, Vec<u8>, u16), Box<dy
     Ok((cid, payload, received_checksum))
 }
 
+//From Lisa's implementation
+pub fn parse_message(response: Vec<u8>) -> Result<(CID_E, Vec<u8>, u16, Vec<u8>), Box<dyn Error>> {
+    // Basic validation of the response
+    if response.len() < 8 || response[0] != b'$' {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Invalid response format"))); // Check format
+    }
+    
+    let hex_str = &response[1..response.len() - 4];
+    if hex_str.len() % 2 != 0 {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "OddLength")));
+    }
+    let byte_repr = hex::decode(hex_str)?;
+    // let byte_repr = hex::decode(&response[1..response.len() - 4]).unwrap(); // Decode the message excluding checksum
 
-/* pub trait SeaTracCommand {
-    fn cid(&self) -> CID_E;
-    fn payload(&self) -> Vec<u8>;
+    let cid = CID_E::from_u8(byte_repr[0]); // Extract Command Identifier (CID)
 
-    fn to_bytes(&self) -> Vec<u8> {
-        let cid_str = format!("{:02X}", self.cid().to_u8());
-        let payload_hex = hex::encode(self.payload());
-        let content = format!("{}{}", cid_str, payload_hex);
-        let checksum = calc_crc16(content.as_bytes());
-        let checksum_str = format!("{:04X}", checksum);
-        let mut msg = Vec::new();
-        msg.push(b'#');
-        msg.extend_from_slice(content.as_bytes());
-        msg.extend_from_slice(checksum_str.as_bytes());
-        msg.extend_from_slice(b"\r\n");
-        msg
+    let payload = byte_repr[1..byte_repr.len()].to_vec(); // Extract payload
+
+    // Validate and compuse std::io::Error;ute CRC
+    let computed_checksum = calc_crc16(&byte_repr); // Compute checksum
+    let received_checksum_bytes = hex::decode(&response[response.len() - 4..response.len()]).unwrap(); // Decode received checksum
+    let received_checksum = u16::from_le_bytes([received_checksum_bytes[0], received_checksum_bytes[1]]); // Convert to u16
+    
+    // Check if the computed checksum matches the received one
+    if computed_checksum != received_checksum {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Checksum mismatch"))); // Handle checksum mismatch
+    }
+
+    match cid {
+        Some(cid) => Ok((cid, payload, received_checksum, byte_repr)), // Return parsed message components
+        None => Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Invalid command identification code"))), // Handle invalid CID
     }
 }
-
-pub trait SeaTracResponse: Sized {
-    fn cid() -> CID_E;
-    fn from_payload(payload: &[u8]) -> Option<Self>;
-}
-
-#[derive(Debug)]
-pub enum SeaTracParseError {
-    InvalidStart,
-    MissingCRLF,
-    UnknownCID,
-    ChecksumMismatch,
-    HexDecodeError,
-    Utf8Error,
-}
-
-pub fn parse_message(msg: &[u8]) -> Result<(CID_E, Vec<u8>), SeaTracParseError> {
-    if msg.len() < 9 {
-        return Err(SeaTracParseError::InvalidStart);
-    }
-
-    let start = msg[0];
-    if start != b'$' && start != b'#' {
-        return Err(SeaTracParseError::InvalidStart);
-    }
-
-    if msg[msg.len()-2] != b'\r' || msg[msg.len()-1] != b'\n' {
-        return Err(SeaTracParseError::MissingCRLF);
-    }
-
-    let cid_str = std::str::from_utf8(&msg[1..3]).map_err(|_| SeaTracParseError::Utf8Error)?;
-    let cid_val = u8::from_str_radix(cid_str, 16).map_err(|_| SeaTracParseError::UnknownCID)?;
-    let cid = CID_E::from_u8(cid_val).ok_or(SeaTracParseError::UnknownCID)?;
-
-    let payload_hex_end = msg.len().saturating_sub(6);
-    let payload_hex = if payload_hex_end > 3 { &msg[3..payload_hex_end] } else { &[] };
-    let payload = hex::decode(payload_hex).map_err(|_| SeaTracParseError::HexDecodeError)?;
-
-    let csum_str = &msg[msg.len()-6..msg.len()-2];
-    let csum = u16::from_str_radix(std::str::from_utf8(csum_str).map_err(|_| SeaTracParseError::Utf8Error)?, 16)
-        .map_err(|_| SeaTracParseError::ChecksumMismatch)?;
-
-    let content = &msg[1..msg.len()-6];
-    if calc_crc16(content) != csum {
-        return Err(SeaTracParseError::ChecksumMismatch);
-    }
-
-    Ok((cid, payload))
-}
- */

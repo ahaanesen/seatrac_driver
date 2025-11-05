@@ -104,7 +104,7 @@ impl SentMessage {
                 self.t,
                 acks
             );
-        println!("Encoding message: {}", status_string);
+        // println!("Encoding message: {}", status_string);
         let packet_data = encode_input(&status_string).expect("Encoding failed");
         packet_data
     }

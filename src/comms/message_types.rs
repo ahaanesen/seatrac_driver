@@ -25,9 +25,9 @@ impl NewMsg{
                 position_string,
                 self.t
             );
-            println!("Encoding message: {}", status_string);
-            let packet_data = encode_input(&status_string).expect("Encoding failed"); // TODO: only encodes string 
-            println!("Encoded packet data: {:?}", packet_data);
+            // println!("Encoding message: {}", status_string);
+            let packet_data = encode_input(&status_string).expect("Encoding failed");
+            // println!("Encoded packet data: {:?}", packet_data);
             packet_data
     }
 }
@@ -90,21 +90,9 @@ impl ReceivedMsg {
             match kv[0] {
                 "node_id" => node_id = kv[1].parse()?,
                 "msg_idx" => message_index = kv[1].parse()?,
-                "pos" => {
-                    let coords: Vec<&str> = kv[1].split(',').collect();
-                    for coord in coords {
-                        let axis: Vec<&str> = coord.split(':').collect();
-                        if axis.len() != 2 {
-                            continue;
-                        }
-                        match axis[0] {
-                            "x" => x = axis[1].parse()?,
-                            "y" => y = axis[1].parse()?,
-                            "z" => z = axis[1].parse()?,
-                            _ => (),
-                        }
-                    }
-                }
+                "x" => x = kv[1].parse()?,
+                "y" => y = kv[1].parse()?,
+                "z" => z = kv[1].parse()?,
                 "t" => t_sent = kv[1].parse()?,
                 "ack" => {
                     let ack_str = kv[1].trim_matches(&['[', ']'][..]);
