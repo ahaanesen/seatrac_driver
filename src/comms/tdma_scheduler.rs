@@ -52,9 +52,10 @@ impl TdmaScheduler {
             ack_handler.message_index += 1;
             let new_msg = ack_handler.queue_new_msg.pop_front().expect("Empty queue");
             ack_handler.add_message(ack_handler.message_index, SentMessage::new(new_msg.position, new_msg.t));
-            let dccl_message = new_msg.to_bytes(self.assigned_slot, ack_handler.message_index);
+            let dccl_message = new_msg.to_bytes(self.assigned_slot, ack_handler.message_index, slot_acks.clone());
+            println!("Broadcasting status message: {:?}", dccl::decode_output(&dccl_message));
             let modem_command = modem.message_out(0, &dccl_message);
-            println!("Modem command to send: {:?}", String::from_utf8(modem_command.clone()).unwrap_or("Non-UTF8 data".to_string()));
+            // println!("Modem command to send: {:?}", String::from_utf8(modem_command.clone()).unwrap_or("Non-UTF8 data".to_string()));
             ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * propagation_time_ms; // TODO: make func?
             modem.send(&modem_command).unwrap();
         }
@@ -69,8 +70,9 @@ impl TdmaScheduler {
                 // Wait before resending the message
                 // println!("Waiting propagation previous message ({} milliseconds) before resending.", ack_handler.wait_time);
                 sleep(Duration::from_millis(ack_handler.wait_time));
-
+                println!("Resending nmsg {}: {:?}", index, message);
                 let dccl_message = message.to_bytes(self.assigned_slot, index, slot_acks.clone());
+                // println!("Resending msg index {}: {:?}", index, dccl::decode_output(&dccl_message));
                 let modem_command = modem.message_out(0, &dccl_message);
                 ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * propagation_time_ms; // TODO: make func
                 // TODO: if still in slot after waittime, send message, else not enough time to resend
@@ -104,42 +106,36 @@ impl TdmaScheduler {
         // println!("Received message type: {}", message_type.as_str());
         match message_type.as_str() { // Can match on other message types here also, if many, might want to switch to a hashmap instead
             "CID_DAT_RECEIVE" => { // TODO: move functionality under to driver module
-                // now make dat_recieve message!
-                // println!("Parsing DAT RECEIVE: {:?}", &recieved_bytes);
                 let dat_receive = structs::DAT_RECEIVE::from_bytes(recieved_bytes)?;
-                // let acofix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
-                println!("DAT_RECEIVE structure: {:?}", dat_receive);
-                //println!("ACOFIX structure: {:?}", acofix);
-                // check local flag
+
                 if dat_receive.local_flag { // Means that message was sent to this node
                     let encoded_packet = dat_receive.packet_data;
                     let packet_string = dccl::decode_output(&encoded_packet)?;
-                    println!("Decoded packet data: {:?}", packet_string);
-                    let rec = message_types::ReceivedMsg::from_string(&packet_string, t_received)?; // TODO: stops here!!
-                    println!("made recieved message struct: {:?}", rec);
-                    received_msg = Some(rec);
+                    // println!("Decoded packet data: {:?}", packet_string);
+                    // println!("made recieved message struct: {:?}", rec);
+                    received_msg = Some(message_types::ReceivedMsg::from_string(&packet_string, t_received)?);
 
                     // TODO: can calculate range here?
 
-                    println!("Received local DAT_RECEIVE packet: {}", packet_string);
+                    // println!("Received local DAT_RECEIVE packet: {}", packet_string);
 
                     // If a broadcased message is read by a usbl modem
                     if modem.is_usbl() {
-                    let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
-                    // let aco_fix = dat_receive.aco_fix;
-                    usbl_data = Some(message_types::UsblData::new(
-                        aco_fix.usbl_channels.unwrap_or(0),
-                        aco_fix.usbl_rssi.unwrap_or(vec![0]),
-                        aco_fix.usbl_azimuth.unwrap_or(0),
-                        aco_fix.usbl_elevation.unwrap_or(0),
-                        aco_fix.usbl_fit_error.unwrap_or(0),
-                    ));
+                        // let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                        let aco_fix = dat_receive.aco_fix;
+                        usbl_data = Some(message_types::UsblData::new(
+                            aco_fix.usbl_channels.unwrap_or(0),
+                            aco_fix.usbl_rssi.unwrap_or(vec![0]),
+                            aco_fix.usbl_azimuth.unwrap_or(0),
+                            aco_fix.usbl_elevation.unwrap_or(0),
+                            aco_fix.usbl_fit_error.unwrap_or(0),
+                        ));
                     }
 
                 } else if !dat_receive.local_flag && modem.is_usbl() { // Assumes all messages are not broadcasted!
                     // Handle USBL specific logic here
-                    let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
-                    // let aco_fix = dat_receive.aco_fix;
+                    // let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                    let aco_fix = dat_receive.aco_fix;
                     usbl_data = Some(message_types::UsblData::new(
                         aco_fix.usbl_channels.unwrap_or(0),
                         aco_fix.usbl_rssi.unwrap_or(vec![0]),
@@ -163,20 +159,9 @@ impl TdmaScheduler {
                 println!("Received CID_DAT_SEND message: {:?}", status);
             }
             _ => {
-                println!("Received unsupported message type: {}", message_type);
+                // println!("Received unsupported message type: {}", message_type);
             }
         }
-        // now make dat_recieve message!
-        
-        // check: local flag = true
-        // dccl decode dat_recieve.payload
-        // publish this string to topic
-        
-        // check: local flag = false and usbl=true
-        // extract azimuth and elevation from dat_recieve.aco_fix
-        // publish to ekf_input topic
-
-
         Ok((received_msg, usbl_data))
     }
 }

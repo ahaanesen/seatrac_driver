@@ -64,7 +64,7 @@ impl SerialModem {
                 }
             }
         }
-        Err(Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "Timeout waiting for response")))
+        Err(format!("Timeout waiting for response with CID: {:?}", expected_cid).into())
     }
 
     // Helper to clamp floats into u8 range safely
@@ -122,7 +122,7 @@ impl ModemDriver for SerialModem {
         println!("Configuring modem: usbl={}, baud_rate={}, beacon_id={}, salinity={}", usbl, baud_rate, beacon_id, salinity);
         // 1. Get current beacon settings
         let get_cmd = make_command(CID_E::CID_SETTINGS_GET, &[]);
-        // println!("Sending settings get command: {:?}", String::from_utf8_lossy(&get_cmd));
+        println!("Sending settings get command: {:?}", String::from_utf8_lossy(&get_cmd));
         self.send(&get_cmd)?;
 
         let get_resp = self.wait_for_response(CID_E::CID_SETTINGS_GET, Duration::from_secs(10))?;
@@ -193,7 +193,7 @@ impl ModemDriver for SerialModem {
     }
 
     fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>> {
-        println!("Getting position for node ID {}", self.node_id);
+        // println!("Getting position for node ID {}", self.node_id);
         // Create a command with the STATUS_BITS_T::ENVIRONMENT flag set
         let environment_flag = STATUS_BITS_T::ENVIRONMENT.bits();
         let get_cmd = make_command(CID_E::CID_STATUS, &[environment_flag]);
@@ -245,8 +245,8 @@ impl ModemDriver for SerialModem {
 
     fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
-        println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
-        println!("{:?}", dat_msg);
+        // println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
+        // println!("{:?}", dat_msg);
         // make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
         prepare_message(CID_E::CID_DAT_SEND, dat_msg)
     }

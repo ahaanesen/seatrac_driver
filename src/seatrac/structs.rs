@@ -447,8 +447,8 @@ impl DAT_SEND{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DAT_RECEIVE {
-    // pub aco_fix: ACOFIX_T,
-    pub aco_fix: Vec<u8>,
+    pub aco_fix: ACOFIX_T,
+    // pub aco_fix: Vec<u8>,
     pub ack_flag: bool,
     pub packet_len: u8,
     pub packet_data: Vec<u8>,
@@ -456,18 +456,28 @@ pub struct DAT_RECEIVE {
 }
 
 impl DAT_RECEIVE {
+    /// Creates a DAT_RECEIVE struct from a byte vector.
+    /// # Arguments
+    /// * `received` - A vector of bytes representing the received data.
+    ///     * NB: needs to be in the dccl encoded format!! If changed, need to coordinate with DAT_SEND.
+    ///     * Debugging ex: DAT_SEND { msg_id: CID_DAT_SEND, dest_id: 0, msg_type: MSG_OWAY, packet_len: 14, packet_data: [248, 0, 0, 20, 0, 216, 39, 0, 216, 39, 0, 0, 0, 0] }, find the index of the packet length and the following data in the bytes to be parsed into DAT_RECEIVE: [97, 0, 1, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 199, 57, 74, 5, 0, 14, 248, 0, 0, 20, 0, 216, 39, 0, 216, 39, 0, 0, 0, 0, 255]
+
+
+    /// # Returns
+    /// * `Result<DAT_RECEIVE, Box<dyn std::error::Error>>
     pub fn from_bytes(received: Vec<u8>) -> Result<DAT_RECEIVE, Box<dyn std::error::Error>> {
-        let pac_len = received[33];
+        let packet_len_idx = 33;
+        let pac_len = received[packet_len_idx];
         let n_us = usize::try_from(pac_len).unwrap();
-        // let aco_fix = ACOFIX_T::from_bytes(&received[1..17])?;
-        let aco_fix = received[1..32].to_vec();
+        let aco_fix = ACOFIX_T::from_bytes(&received[1..(packet_len_idx-1)])?;
+        // let aco_fix = received[1..(packet_len_idx-1)].to_vec();
         let dat_receive = DAT_RECEIVE {
             // msg_id: CID_E::CID_DAT_RECEIVE,
             aco_fix,
-            ack_flag: u8_to_bool(received[32]),
+            ack_flag: u8_to_bool(received[(packet_len_idx-1)]),
             packet_len: pac_len,
-            packet_data: received[34..(34 + n_us)].to_vec(),
-            local_flag: u8_to_bool(received[34 + n_us ]),
+            packet_data: received[(packet_len_idx+1)..((packet_len_idx+1) + n_us)].to_vec(),
+            local_flag: u8_to_bool(received[(packet_len_idx+1) + n_us ]),
         };
         Ok(dat_receive)
     }

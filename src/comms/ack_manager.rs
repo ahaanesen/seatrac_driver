@@ -97,7 +97,7 @@ impl SentMessage {
         // Convert the SentMessage struct to bytes for transmission
         // Implement serialization logic here
         let position_string = self.position.to_string();
-        let status_string = format!("node_id:{}, msg_idx:{}, pos:{}, t:{}, ack:{:?}", // TODO: format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}",
+        let status_string = format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}", // TODO: format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}",
                 node_id,
                 message_index,
                 position_string,
@@ -131,10 +131,14 @@ impl SentMsgManager {
             wait_time: 0,
         }
     }
+    /// Prepares new tdma round by resetting wait time, clearing received acks and listened messages
+    /// # Returns
+    /// * A vector of i32 representing the acks to be sent out in the slot
     pub fn initialize_ack_slot(&mut self) -> Vec<i32> {  // is this necessary?
         self.wait_time = 0;
         let ack_msg = create_ack(&mut self.received_acks);
         self.received_acks.clear();
+        self.listened_msg.clear(); // TODO: check on this
         // TODO: more here?
         ack_msg
     }
@@ -160,8 +164,8 @@ impl SentMsgManager {
         if let Some(message) = self.messages.get_mut(&key) {
             let to_remove = message.add_node_ack(node_id, num_beacons); // Update acknowledgment
             if to_remove {
+                println!("Message nr {} read by ALL", key);
                 self.remove_message(key); // Remove message if all acknowledgments received
-                println!("Message read by ALL");
             }
             true
         } else {
@@ -187,9 +191,10 @@ impl SentMsgManager {
     // Handle acknowledgments from received message (only one message at a time)
     pub fn handle_acknowledgments(
         &mut self,
-        received_message: message_types::ReceivedMsg, // can change to only acks?
+        received_message: &message_types::ReceivedMsg, // can change to only acks?
         num_beacons: u8,
     ) {
+        self.received_acks.push(MsgReceivedAck::new(received_message.node_id as i32, received_message.message_index)); // Store received acknowledgment
         if !received_message.acks.is_empty() {
             let acks_from_message = received_ack_from_list(received_message.acks.clone());
             for ack in acks_from_message {
@@ -198,7 +203,7 @@ impl SentMsgManager {
                 // info!("{}", log_entry);
                 self.add_nodeid_to_message(ack.nmsg, ack.node_id, num_beacons as i32); // Update sent message manager with acknowledgments
             }
-            self.received_acks.push(MsgReceivedAck::new(received_message.node_id as i32, received_message.message_index)); // Store received acknowledgment
+            // self.received_acks.push(MsgReceivedAck::new(received_message.node_id as i32, received_message.message_index)); // Store received acknowledgment
 
         } else {
             println!("No acknowledgments in received message.");

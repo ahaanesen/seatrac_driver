@@ -15,15 +15,16 @@ impl NewMsg{
     }
 
     /// Convert the NewMsg struct to bytes for transmission with dccl encoding
-    pub fn to_bytes(&self, node_id: u8, message_index: i32) -> Vec<u8> {
+    pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
         // Convert the NewMsg struct to bytes for transmission
         // Implement serialization logic here
             let position_string = self.position.to_string();
-            let status_string = format!("node_id:{} msg_idx:{} {} t:{}", 
+            let status_string = format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}", 
                 node_id,
                 message_index,
                 position_string,
-                self.t
+                self.t,
+                acks
             );
             // println!("Encoding message: {}", status_string);
             let packet_data = encode_input(&status_string).expect("Encoding failed");
@@ -72,38 +73,103 @@ impl ReceivedMsg {
             acks: vec![],
         }
     }
+
+    /// Parse messages such as:
+    /// - "node_id:1 msg_idx:42 x:10 y:20 z:30 t:123456 ack:[1,2,3]"
+    /// - "node_id: 0 msg_idx: 1 x: 255 y: 4 z: 0 t: 0\n"
+    /// - mixed forms like "ack: [1,2,3]" or "ack:[1,2,3]"
     pub fn from_string(data: &str, t_received: u64) -> Result<Self, Box<dyn std::error::Error>> {
-        let parts: Vec<&str> = data.split_whitespace().collect();
-        let mut node_id = 0;
-        let mut message_index = 0;
-        let mut x = 0;
-        let mut y = 0;
-        let mut z = 0;
-        let mut t_sent = 0;
+        let tokens: Vec<&str> = data.split_whitespace().collect();
+        let mut i = 0usize;
+
+        let mut node_id: u8 = 0;
+        let mut message_index: i32 = 0;
+        let mut x: u8 = 0;
+        let mut y: u8 = 0;
+        let mut z: u8 = 0;
+        let mut t_sent: u64 = 0;
         let mut acks: Vec<i32> = vec![];
 
-        for part in parts {
-            let kv: Vec<&str> = part.split(':').collect();
-            if kv.len() != 2 {
-                continue;
-            }
-            match kv[0] {
-                "node_id" => node_id = kv[1].parse()?,
-                "msg_idx" => message_index = kv[1].parse()?,
-                "x" => x = kv[1].parse()?,
-                "y" => y = kv[1].parse()?,
-                "z" => z = kv[1].parse()?,
-                "t" => t_sent = kv[1].parse()?,
-                "ack" => {
-                    let ack_str = kv[1].trim_matches(&['[', ']'][..]);
-                    for ack in ack_str.split(',') {
-                        if !ack.trim().is_empty() {
-                            acks.push(ack.trim().parse()?);
+        while i < tokens.len() {
+            let token = tokens[i];
+            // Prefer splitn so values with ":" in them (unlikely here) are handled conservatively
+            if let Some(colon_pos) = token.find(':') {
+                let key = token[..colon_pos].trim();
+                let val_inline = token[colon_pos + 1..].trim();
+
+                if !val_inline.is_empty() {
+                    // e.g., "x:255" or "ack:[1,2]"
+                    match key {
+                        "node_id" => node_id = val_inline.parse()?,
+                        "msg_idx" => message_index = val_inline.parse()?,
+                        "x" => x = val_inline.parse()?,
+                        "y" => y = val_inline.parse()?,
+                        "z" => z = val_inline.parse()?,
+                        "t" => t_sent = val_inline.parse()?,
+                        "ack" => {
+                            let ack_str = val_inline.trim_matches(&['[', ']'][..]);
+                            for ack in ack_str.split(',') {
+                                let a = ack.trim();
+                                if !a.is_empty() {
+                                    acks.push(a.parse()?);
+                                }
+                            }
                         }
+                        _ => {}
+                    }
+                } else {
+                    // token is like "node_id:" or "node_id:" followed by the value in the next token
+                    if i + 1 < tokens.len() {
+                        let next = tokens[i + 1].trim();
+                        match key {
+                            "node_id" => node_id = next.parse()?,
+                            "msg_idx" => message_index = next.parse()?,
+                            "x" => x = next.parse()?,
+                            "y" => y = next.parse()?,
+                            "z" => z = next.parse()?,
+                            "t" => t_sent = next.parse()?,
+                            "ack" => {
+                                let ack_str = next.trim_matches(&['[', ']'][..]);
+                                for ack in ack_str.split(',') {
+                                    let a = ack.trim();
+                                    if !a.is_empty() {
+                                        acks.push(a.parse()?);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        i += 1; // consumed the next token as value
                     }
                 }
-                _ => (),
+            } else if token.ends_with(':') {
+                // token like "node_id:" (split_whitespace might keep trailing colon)
+                let key = token.trim_end_matches(':').trim();
+                if i + 1 < tokens.len() {
+                    let next = tokens[i + 1].trim();
+                    match key {
+                        "node_id" => node_id = next.parse()?,
+                        "msg_idx" => message_index = next.parse()?,
+                        "x" => x = next.parse()?,
+                        "y" => y = next.parse()?,
+                        "z" => z = next.parse()?,
+                        "t" => t_sent = next.parse()?,
+                        "ack" => {
+                            let ack_str = next.trim_matches(&['[', ']'][..]);
+                            for ack in ack_str.split(',') {
+                                let a = ack.trim();
+                                if !a.is_empty() {
+                                    acks.push(a.parse()?);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    i += 1; // consumed the next token as value
+                }
             }
+            // otherwise skip unknown token
+            i += 1;
         }
 
         Ok(ReceivedMsg {
@@ -115,6 +181,7 @@ impl ReceivedMsg {
             acks,
         })
     }
+
     pub fn to_string(&self) -> String {
         let position_string = self.position.to_string();
         format!(
@@ -148,5 +215,66 @@ impl UsblData {
             elevation,
             fit_error,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_string_parses_with_acks() {
+        let data = "node_id:1 msg_idx:42 x:10 y:20 z:30 t:123456 ack:[1,2,3]";
+        let t_received = 1_600_000u64;
+        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+
+        let expected = ReceivedMsg {
+            node_id: 1u8,
+            message_index: 42i32,
+            position: PositionalCoordinates::new(10, 20, 30),
+            t_sent: 123456u64,
+            t_received,
+            acks: vec![1, 2, 3],
+        };
+
+        assert_eq!(msg, expected);
+    }
+
+    #[test]
+    fn from_string_parses_empty_ack_and_ignores_bad_parts() {
+        // new_msg.rs defines PositionalCoordinates fields as u8, so x must be in 0..=255.
+        // Replace negative value with a valid u8 (e.g., 255) in the test input and expected struct.
+        let data = "node_id:2 msg_idx:7 x:255 y:0 z:5 t:42 ack:[] garbage_key:foo";
+        let t_received = 2_000u64;
+        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+
+        let expected = ReceivedMsg {
+            node_id: 2u8,
+            message_index: 7i32,
+            position: PositionalCoordinates::new(255, 0, 5),
+            t_sent: 42u64,
+            t_received,
+            acks: vec![],
+        };
+
+        assert_eq!(msg, expected);
+    }
+        #[test]
+    fn from_string_parses_spaced_input() {
+        // new test for the spaced form you mentioned:
+        let data = "node_id: 0 msg_idx: 1 x: 255 y: 4 z: 0 t: 0\n";
+        let t_received = 3_000u64;
+        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+
+        let expected = ReceivedMsg {
+            node_id: 0u8,
+            message_index: 1i32,
+            position: PositionalCoordinates::new(255, 4, 0),
+            t_sent: 0u64,
+            t_received,
+            acks: vec![],
+        };
+
+        assert_eq!(msg, expected);
     }
 }
