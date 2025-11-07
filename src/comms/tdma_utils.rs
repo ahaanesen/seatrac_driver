@@ -4,14 +4,12 @@ use std::fs;
 use std::error::Error;
 use serde_json;
 
-use crate::seatrac::enums::CID_E;
 
 #[derive(serde::Deserialize)]
 pub struct CommsConfig {
     pub tdma_slot_duration_s: u8,
     pub beacons_in_network: u8,
     pub node_id: u8,
-    pub num_floats_pos: u8,
     pub propagation_time: u64, // in ms
 }
 
@@ -25,11 +23,6 @@ impl CommsConfig {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct AcousticMessage {
-    pub command_id: CID_E,
-    pub payload: Vec<u8>,
-}
 
 // Function to get the total seconds since UNIX epoch
 pub fn get_total_seconds() -> u64 {
@@ -38,4 +31,17 @@ pub fn get_total_seconds() -> u64 {
         .expect("Time went backwards!");
 
     duration_since_epoch.as_secs()
+}
+
+/// Calculates the TDMA slot after a given message propagation time.
+/// # Args:
+/// - `comms_config`: Reference to the communication configuration settings.
+/// - `wait_time_ms`: The propagation time in milliseconds of the previously sent message.
+pub fn get_slot_after_propag(comms_config: &CommsConfig, wait_time_ms: u64) -> u8 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u64 + wait_time_ms / 1000;
+    let cycle_time = comms_config.tdma_slot_duration_s as u64 * comms_config.beacons_in_network as u64;
+    ((now % cycle_time) / comms_config.tdma_slot_duration_s as u64) as u8
 }

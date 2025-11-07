@@ -63,7 +63,7 @@ pub struct ReceivedMsg {
 }
 
 impl ReceivedMsg {
-    pub fn new_empty () -> Self {
+    pub fn _new_empty () -> Self { // TODO:Remove?
         ReceivedMsg {
             node_id: 0,
             message_index: 0,
@@ -218,63 +218,61 @@ impl UsblData {
     }
 }
 
+
+// Some tests for ReceivedMsg::from_string
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[test]
+fn from_string_parses_with_acks() {
+    let data = "node_id:1 msg_idx:42 x:10 y:20 z:30 t:123456 ack:[1,2,3]";
+    let t_received = 1_600_000u64;
+    let msg = ReceivedMsg::from_string(data, t_received).unwrap();
 
-    #[test]
-    fn from_string_parses_with_acks() {
-        let data = "node_id:1 msg_idx:42 x:10 y:20 z:30 t:123456 ack:[1,2,3]";
-        let t_received = 1_600_000u64;
-        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+    let expected = ReceivedMsg {
+        node_id: 1u8,
+        message_index: 42i32,
+        position: PositionalCoordinates::new(10, 20, 30),
+        t_sent: 123456u64,
+        t_received,
+        acks: vec![1, 2, 3],
+    };
 
-        let expected = ReceivedMsg {
-            node_id: 1u8,
-            message_index: 42i32,
-            position: PositionalCoordinates::new(10, 20, 30),
-            t_sent: 123456u64,
-            t_received,
-            acks: vec![1, 2, 3],
-        };
+    assert_eq!(msg, expected);
+}
 
-        assert_eq!(msg, expected);
-    }
+#[test]
+fn from_string_parses_empty_ack_and_ignores_bad_parts() {
+    // new_msg.rs defines PositionalCoordinates fields as u8, so x must be in 0..=255.
+    // Replace negative value with a valid u8 (e.g., 255) in the test input and expected struct.
+    let data = "node_id:2 msg_idx:7 x:255 y:0 z:5 t:42 ack:[] garbage_key:foo";
+    let t_received = 2_000u64;
+    let msg = ReceivedMsg::from_string(data, t_received).unwrap();
 
-    #[test]
-    fn from_string_parses_empty_ack_and_ignores_bad_parts() {
-        // new_msg.rs defines PositionalCoordinates fields as u8, so x must be in 0..=255.
-        // Replace negative value with a valid u8 (e.g., 255) in the test input and expected struct.
-        let data = "node_id:2 msg_idx:7 x:255 y:0 z:5 t:42 ack:[] garbage_key:foo";
-        let t_received = 2_000u64;
-        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+    let expected = ReceivedMsg {
+        node_id: 2u8,
+        message_index: 7i32,
+        position: PositionalCoordinates::new(255, 0, 5),
+        t_sent: 42u64,
+        t_received,
+        acks: vec![],
+    };
 
-        let expected = ReceivedMsg {
-            node_id: 2u8,
-            message_index: 7i32,
-            position: PositionalCoordinates::new(255, 0, 5),
-            t_sent: 42u64,
-            t_received,
-            acks: vec![],
-        };
+    assert_eq!(msg, expected);
+}
+#[test]
+fn from_string_parses_spaced_input() {
+    // new test for the spaced form you mentioned:
+    let data = "node_id: 0 msg_idx: 1 x: 255 y: 4 z: 0 t: 0\n";
+    let t_received = 3_000u64;
+    let msg = ReceivedMsg::from_string(data, t_received).unwrap();
 
-        assert_eq!(msg, expected);
-    }
-        #[test]
-    fn from_string_parses_spaced_input() {
-        // new test for the spaced form you mentioned:
-        let data = "node_id: 0 msg_idx: 1 x: 255 y: 4 z: 0 t: 0\n";
-        let t_received = 3_000u64;
-        let msg = ReceivedMsg::from_string(data, t_received).unwrap();
+    let expected = ReceivedMsg {
+        node_id: 0u8,
+        message_index: 1i32,
+        position: PositionalCoordinates::new(255, 4, 0),
+        t_sent: 0u64,
+        t_received,
+        acks: vec![],
+    };
 
-        let expected = ReceivedMsg {
-            node_id: 0u8,
-            message_index: 1i32,
-            position: PositionalCoordinates::new(255, 4, 0),
-            t_sent: 0u64,
-            t_received,
-            acks: vec![],
-        };
-
-        assert_eq!(msg, expected);
-    }
+    assert_eq!(msg, expected);
 }

@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use log::info;
 use crate::comms::{dccl::encode_input, message_types::{self, NewMsg, PositionalCoordinates, ReceivedMsg}};
 
 /// Struct to hold acknowledgment information for received messages
@@ -42,31 +41,6 @@ pub fn received_ack_from_list(ack: Vec<i32>) -> Vec<MsgReceivedAck> {
     result
 }
 
-// Handle acknowledgments from received messages
-// fn handle_acknowledgments(
-//     result: &mut Vec<i32>, 
-//     received: &mut Vec<MsgReceivedAck>, 
-//     sent_manage: &mut SentMsgManager, 
-//     num_beacons: i32, 
-//     initial_time: u64,
-//     num_field: usize
-// ) {
-//     // Additional logic to handle acknowledgments would go here
-//     if result.len() >= (num_field+3).try_into().unwrap() {
-//         let ack = received_ack_from_list(result[num_field+3..].to_vec()); // Parse acknowledgments
-//         for a in ack {
-//             let log_entry = format!("Received ACK from node {} of {} message\n", a.node_id, a.nmsg);
-//             println!("{}", log_entry);
-//             info!("{}", log_entry);
-//             sent_manage.add_nodeid_to_message(a.nmsg, a.node_id, num_beacons); // Update sent message manager with acknowledgments
-//         }
-//         received.push(MsgReceivedAck::new(result[0], result[1])); // Store received acknowledgment
-//     }else{
-//         print!("No ack\n");
-//     }
-// }
-
-
 /// Struct to hold information about sent messages and their acknowledgments
 #[derive(Clone, Debug)]
 pub struct SentMessage {
@@ -94,8 +68,6 @@ impl SentMessage {
     }
 
     pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
-        // Convert the SentMessage struct to bytes for transmission
-        // Implement serialization logic here
         let position_string = self.position.to_string();
         let status_string = format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}", // TODO: format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}",
                 node_id,
@@ -133,8 +105,8 @@ impl SentMsgManager {
     }
     /// Prepares new tdma round by resetting wait time, clearing received acks and listened messages
     /// # Returns
-    /// * A vector of i32 representing the acks to be sent out in the slot
-    pub fn initialize_ack_slot(&mut self) -> Vec<i32> {  // is this necessary?
+    /// * The acks to be sent out in the new tdma round, as Vec<i32>
+    pub fn prepare_round(&mut self) -> Vec<i32> {  // is this necessary?
         self.wait_time = 0;
         let ack_msg = create_ack(&mut self.received_acks);
         self.received_acks.clear();

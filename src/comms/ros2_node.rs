@@ -11,6 +11,7 @@ pub struct MessageQueues {
     pub from_modem: Arc<Mutex<Vec<String>>>,   // Messages from modem to ROS
 }
 
+
 #[derive(Clone)]
 pub struct RosBridge {
     worker: Worker<Option<String>>,
@@ -20,29 +21,29 @@ pub struct RosBridge {
 
 impl RosBridge {
         pub fn new(executor: &Executor, node_name: &str) -> Result<Self, RclrsError> {
-        let node = executor.create_node(node_name)?;
-        let worker = node.create_worker(None);
+            let node = executor.create_node(node_name)?;
+            let worker = node.create_worker(None);
 
-        let queues = MessageQueues {
-            to_modem: Arc::new(Mutex::new(Vec::new())),
-            from_modem: Arc::new(Mutex::new(Vec::new())),
-        };
+            let queues = MessageQueues {
+                to_modem: Arc::new(Mutex::new(Vec::new())),
+                from_modem: Arc::new(Mutex::new(Vec::new())),
+            };
 
-        // Publisher for outgoing data to /seatrac/output
-        let out_topic = format!("/{}/output", node_name);
-        let publisher = node.create_publisher::<StringMsg>(out_topic.as_str())?;
+            // Publisher: outgoing data to /seatrac_x/output
+            let out_topic = format!("/{}/output", node_name);
+            let publisher = node.create_publisher::<StringMsg>(out_topic.as_str())?;
 
-        // Subscription: push incoming ROS data into send queue
-        let in_topic = format!("/{}/input", node_name);
-        worker.create_subscription::<StringMsg, _>(
-            in_topic.as_str(),
-            move |data: &mut Option<String>, msg: StringMsg| {
-                *data = Some(msg.data);
-            },
-        )?;
+            // Subscription: push incoming ROS data into send queue
+            let in_topic = format!("/{}/input", node_name);
+            worker.create_subscription::<StringMsg, _>(
+                in_topic.as_str(),
+                move |data: &mut Option<String>, msg: StringMsg| {
+                    *data = Some(msg.data);
+                },
+            )?;
 
-        Ok(Self { worker, publisher, queues })
-    }
+            Ok(Self { worker, publisher, queues })
+        }
 
     /// Publish all messages currently waiting in the receive queue
     pub fn queue_from_subscription(&self) -> Result<(), RclrsError> {

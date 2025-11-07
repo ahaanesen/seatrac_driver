@@ -50,18 +50,3 @@ pub fn decode_output(encoded_output: &[u8]) -> Result<String, String> {
         Err(String::from_utf8_lossy(&decoded_output.stderr).to_string())
     }
 }
-
-/// Extracts integers from the decoded string result of DCCL.
-pub fn extract_values(decoded_result: &str) -> Vec<i32> {
-
-    decoded_result.split_whitespace()
-        .filter_map(|pair| {
-            let parts: Vec<&str> = pair.split(':').collect();
-            if parts.len() == 1 {
-                parts[0].trim().parse::<i32>().ok()
-            } else {
-                None
-            }
-        })
-        .collect()
-}

@@ -1,5 +1,4 @@
 use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl}; use std::mem;
-// Serial port settings and controls
 use std::time::{Duration, Instant};
 use std::error::Error;
 use std::io::{Read, Write};

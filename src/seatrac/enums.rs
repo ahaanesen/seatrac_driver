@@ -489,7 +489,7 @@ pub enum CST_E { // Command Status Codes
 }
 
 impl CST_E {
-    pub fn to_u8(&self) -> u8 {
+    pub fn _to_u8(&self) -> u8 {
         match *self {
             CST_E::CST_OK => 0x00,
             CST_E::CST_FAIL => 0x01,
@@ -614,19 +614,20 @@ impl STATUSMODE_E {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum XCVR_TXMSGCTRL_E { // Transmit Message Control
-    XCVR_TXMSG_ALLOW_ALL = 0x0,
-    XCVR_TXMSG_BLOCK_RESP = 0x1,
-    XCVR_TXMSG_BLOCK_ALL = 0x3,
-}
+// TODO: check if can be removed?
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum XCVR_TXMSGCTRL_E { // Transmit Message Control
+//     XCVR_TXMSG_ALLOW_ALL = 0x0,
+//     XCVR_TXMSG_BLOCK_RESP = 0x1,
+//     XCVR_TXMSG_BLOCK_ALL = 0x3,
+// }
 
-impl XCVR_TXMSGCTRL_E {
-    pub fn to_u8(&self) -> u8 {
-        match *self {
-            XCVR_TXMSGCTRL_E::XCVR_TXMSG_ALLOW_ALL => 0x0,
-            XCVR_TXMSGCTRL_E::XCVR_TXMSG_BLOCK_RESP => 0x1,
-            XCVR_TXMSGCTRL_E::XCVR_TXMSG_BLOCK_ALL => 0x3,
-        }
-    }
-}
+// impl XCVR_TXMSGCTRL_E {
+//     pub fn to_u8(&self) -> u8 {
+//         match *self {
+//             XCVR_TXMSGCTRL_E::XCVR_TXMSG_ALLOW_ALL => 0x0,
+//             XCVR_TXMSGCTRL_E::XCVR_TXMSG_BLOCK_RESP => 0x1,
+//             XCVR_TXMSGCTRL_E::XCVR_TXMSG_BLOCK_ALL => 0x3,
+//         }
+//     }
+// }
