@@ -34,7 +34,16 @@ fn calc_crc16(buf: &[u8]) -> u16 {
             v >>= 1;
         }
     }
+    // crc = (crc & 0xFF) << 8 | (crc >> 8 & 0xFF);
     crc
+}
+
+#[test]
+fn crc_append_roundtrip() {
+    let data: Vec<u8> = vec![0x15]; // example bytes from spec
+    let crc = calc_crc16(&data);
+    println!("Calculated CRC: {:04X}", crc);
+    // assert_eq!(calc_crc16(&data), 0, "CRC over data+CRC should be 0");
 }
 
 // From Lisa
@@ -87,25 +96,63 @@ pub fn prepare_message(cid: CID_E, msg: structs::DAT_SEND) -> Vec<u8> {
 /// * `payload` - The payload data as a byte slice
 /// # Returns
 /// * A vector of bytes representing the complete ASCII command message
+// pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
+//     // CID as two ASCII hex chars
+//     let cid_str = format!("{:02X}", cid.to_u8());
+//     // Encode payload as hex
+//     let payload_hex = hex::encode(payload);
+//     // Build message without checksum/delimiters
+//     let content = format!("{}{}", cid_str, payload_hex);
+//     // ASCII bytes (for CRC calculation)
+//     let content_bytes = content.as_bytes();
+//     let checksum = calc_crc16(content_bytes);
+//     let checksum_bytes = checksum.to_le_bytes();
+//     let checksum_str = format!("{:02X}{:02X}", checksum_bytes[0], checksum_bytes[1]);
+//     // Full message: #CIDPayloadCSUM<CR><LF>
+//     let mut msg = Vec::new();
+//     msg.push(b'#');
+//     msg.extend_from_slice(content_bytes);
+//     msg.extend_from_slice(checksum_str.as_bytes());
+//     msg.push(b'\r');
+//     msg.push(b'\n');
+//     msg
+// }
+
 pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
-    // CID as two ASCII hex chars
-    let cid_str = format!("{:02X}", cid.to_u8());
-    // Encode payload as hex
-    let payload_hex = hex::encode(payload);
-    // Build message without checksum/delimiters
-    let content = format!("{}{}", cid_str, payload_hex);
-    // ASCII bytes (for CRC calculation)
-    let content_bytes = content.as_bytes();
-    let checksum = calc_crc16(content_bytes);
-    let checksum_str = format!("{:04X}", checksum); // 4 chars ASCII hex
-    // Full message: #CIDPayloadCSUM<CR><LF>
-    let mut msg = Vec::new();
+    // Compute CRC over binary bytes: CID byte followed by payload bytes
+    let cid_byte = cid.to_u8();
+    let mut crc_buf = Vec::with_capacity(1 + payload.len());
+    crc_buf.push(cid_byte);
+    crc_buf.extend_from_slice(payload);
+    let checksum = calc_crc16(&crc_buf);
+    let checksum_bytes = checksum.to_le_bytes();
+    let checksum_str = format!("{:02X}{:02X}", checksum_bytes[0], checksum_bytes[1]);
+
+    // Build ASCII hex fields for the message
+    let cid_str = format!("{:02X}", cid_byte);
+    // Use uppercase hex for consistency (hex::encode returns lowercase by default)
+    let payload_hex = hex::encode(payload).to_uppercase();
+    // let checksum_str = format!("{:04X}", checksum); // 4 ASCII hex chars, uppercase
+
+    // Assemble full message: #CIDPayloadCSUM<CR><LF>
+    let mut msg = Vec::with_capacity(1 + cid_str.len() + payload_hex.len() + checksum_str.len() + 2);
     msg.push(b'#');
-    msg.extend_from_slice(content_bytes);
+    msg.extend_from_slice(cid_str.as_bytes());
+    msg.extend_from_slice(payload_hex.as_bytes());
     msg.extend_from_slice(checksum_str.as_bytes());
     msg.push(b'\r');
     msg.push(b'\n');
     msg
+}
+
+#[cfg(test)]
+#[test]
+fn test_make_command() {
+    let solution = b"#15C1CF\r\n";
+    let cid = enums::CID_E::from_u8(0x15).unwrap();
+    let payload = &[];
+    let command = make_command(cid, payload);
+    assert!(command == solution, "Generated: {} Expected: {}", String::from_utf8_lossy(&command), String::from_utf8_lossy(solution));
 }
 
 // TODO: unify with above function?

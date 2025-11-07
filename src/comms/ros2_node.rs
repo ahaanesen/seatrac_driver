@@ -29,11 +29,13 @@ impl RosBridge {
         };
 
         // Publisher for outgoing data to /seatrac/output
-        let publisher = node.create_publisher::<StringMsg>("/seatrac/output")?;
+        let out_topic = format!("/{}/output", node_name);
+        let publisher = node.create_publisher::<StringMsg>(out_topic.as_str())?;
 
         // Subscription: push incoming ROS data into send queue
+        let in_topic = format!("/{}/input", node_name);
         worker.create_subscription::<StringMsg, _>(
-            "/seatrac/input",
+            in_topic.as_str(),
             move |data: &mut Option<String>, msg: StringMsg| {
                 *data = Some(msg.data);
             },

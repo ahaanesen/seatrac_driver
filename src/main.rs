@@ -10,7 +10,7 @@ use crate::{comms::{ack_manager::{self, SentMsgManager}, ros2_node}, modem_drive
 static DEFAULT_BAUD_RATE: u32 = 115200;
 
 /// Main function to initialize the ROS2 node and TDMA scheduler.
-/// Run with "cargo run <node_id>"
+/// Run with "cargo run <node_id> [usbl]"
 fn main() -> Result<(), RclrsError> {
     let mut driver_config = modem_driver::DriverConfig::load_from_file("config_driver.json").unwrap_or_else(|e| {
         panic!("Failed to load driver configuration: {}", e);
@@ -20,7 +20,7 @@ fn main() -> Result<(), RclrsError> {
         panic!("Failed to load communication configuration: {}", e);
     });
 
-     // Parse command-line arguments to set node id
+    // Parse command-line arguments to set node id and optional usbl flag
     let args: Vec<String> = env::args().collect();
     let node_id = if args.len() > 1 {
         args[1].parse::<u8>().unwrap_or_else(|_| {
@@ -29,6 +29,10 @@ fn main() -> Result<(), RclrsError> {
     } else {
         panic!("Node ID argument is required.");
     };
+
+    // Check for optional "usbl" argument
+    let usbl = args.iter().any(|arg| arg == "usbl");
+    driver_config.usbl = usbl || false;
 
     // Update the node_id and beacon_id in driver_config and comms_config
     let port_name = format!("/dev/ttyUSB{}", node_id);
@@ -70,7 +74,7 @@ fn main() -> Result<(), RclrsError> {
     modem.configure(driver_config.usbl, DEFAULT_BAUD_RATE, driver_config.beacon_id, driver_config.salinity).unwrap();
 
     let mut executor = Context::default_from_env()?.create_basic_executor();
-    let node_name = "seatrac_node_".to_string() + &comms_config.node_id.to_string(); //most important the comms and ros2 node have the same id
+    let node_name = "seatrac_".to_string() + &comms_config.node_id.to_string(); //most important the comms and ros2 node have the same id
     let bridge_node = ros2_node::RosBridge::new(&executor, &node_name)?;
     let queues = bridge_node.queues.clone();
 
