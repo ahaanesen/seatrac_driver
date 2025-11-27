@@ -1,4 +1,4 @@
-use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl}; use std::mem;
+use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl};
 use std::time::{Duration, Instant};
 use std::error::Error;
 use std::io::{Read, Write};
@@ -6,10 +6,10 @@ use crate::modem_driver::ModemDriver;
 use crate::seatrac::enums::{self, CID_E, CST_E};
 use crate::seatrac::ascii_message::{make_command, make_command_u16, parse_message, parse_response, prepare_message};
 // use crate::seatrac::helpers::calculate_propagation_time;
-use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPONSE, XCVR_FLAGS};
+use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPONSE};
 
 
-static DEFAULT_BAUD_RATE: u32 = 115200;
+static _DEFAULT_BAUD_RATE: u32 = 115200;
 
 pub struct SerialModem {
     port: Box<dyn SerialPort>,
@@ -227,22 +227,19 @@ impl ModemDriver for SerialModem {
                 let z_u8 = Self::clamp_to_u8(z);
                 Ok(vec![x_u8, y_u8, z_u8])
             }
+            2 => {
+                let x = 15.0 * (0.05 * t as f64).cos();
+                let y = 15.0 * (0.05 * t as f64).sin();
+                let x_u8 = Self::clamp_to_u8(x);
+                let y_u8 = Self::clamp_to_u8(y);
+                let z_u8 = Self::clamp_to_u8(z);
+                Ok(vec![x_u8, y_u8, z_u8])
+            }
             _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Error: get_position received an invalid node_id"))), // Handle invalid node IDs
         }
     }
-    
-    fn broadcast_msg(&mut self, data: &[u8]) -> Result<(u64), Box<dyn Error>> {
-        let broadcast_id = 0;
-        let dat_msg = DAT_SEND::new(broadcast_id, data.to_vec());
-        let cmd = make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes());
 
-        let propagation_delay = mem::size_of_val(&cmd) as u64 * self.propagation_time_ms as u64;
-        self.send(&cmd)?;
-
-        Ok(propagation_delay)
-    }
-
-    fn message_out(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
+    fn to_serial(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
         // println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
         // println!("{:?}", dat_msg);
@@ -251,7 +248,7 @@ impl ModemDriver for SerialModem {
     }
 
     // Parses a raw byte message received from the modem into command id and byte payload
-    fn message_in(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+    fn from_serial(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
         let (cid, _payload, _checksum, byte_representation) = parse_message(data.to_vec())?;
         // println!("Received {} message", cid.to_string());
         // TODO: change to only allow dat_receive?

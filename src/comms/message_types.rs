@@ -1,6 +1,7 @@
 // connected to acknowledgment manager
 use crate::{comms::dccl::encode_input};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewMsg {
     pub position: PositionalCoordinates,
     pub t: u64
@@ -199,6 +200,8 @@ impl ReceivedMsg {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UsblData{
+    pub node_id: u8,
+    pub time: u64,
     pub channels: u8,
     pub rssi: Vec<i16>,
     pub azimuth: i16,
@@ -207,8 +210,11 @@ pub struct UsblData{
 }
 
 impl UsblData {
-    pub fn new(channels: u8, rssi: Vec<i16>, azimuth: i16, elevation: i16, fit_error: i16) -> Self {
+    pub fn new(node_id: u8, time: u64, channels: u8, rssi: Vec<i16>, azimuth: i16, elevation: i16, fit_error: i16
+    ) -> Self {
         UsblData {
+            node_id,
+            time,
             channels,
             rssi,
             azimuth,

@@ -6,7 +6,8 @@ use crate::{comms::{ack_manager::{SentMessage, SentMsgManager}, dccl, message_ty
 
 /// Broadcasts a status message with the nodes position
 pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, initial_time: u64, ack_handler: &mut SentMsgManager, slot_acks: &Vec<i32>) {
-    let t_send = tdma_utils::get_total_seconds() - initial_time;
+    //let t_send = tdma_utils::get_total_seconds() - initial_time;
+    let t_send = tdma_utils::get_total_seconds();
 
     let pos = modem.get_position(t_send).unwrap(); // Get the node's position
     let pos = PositionalCoordinates::new(pos[0], pos[1], pos[2]);
@@ -20,7 +21,7 @@ pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDri
         ack_handler.add_message(ack_handler.message_index, SentMessage::new(new_msg.position, new_msg.t));
         let dccl_message = new_msg.to_bytes(comms_config.node_id, ack_handler.message_index, slot_acks.clone());
         println!("Broadcasting status message: {:?}", dccl::decode_output(&dccl_message));
-        let modem_command = modem.message_out(0, &dccl_message);
+        let modem_command = modem.to_serial(0, &dccl_message);
         // println!("Modem command to send: {:?}", String::from_utf8(modem_command.clone()).unwrap_or("Non-UTF8 data".to_string()));
         ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.propagation_time; // TODO: make func?
         modem.send(&modem_command).unwrap();
@@ -31,14 +32,16 @@ pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDri
 
 /// Resends all messages in the SentMsgManager that have not been acknowledged
 pub fn resend_messages(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, ack_handler: &mut SentMsgManager, slot_acks: &Vec<i32>) {
-    for (index, message) in ack_handler.list_messages() {
+    for (index, mut message) in ack_handler.list_messages() {
         if index != ack_handler.message_index { // Don't resend the just sent message
             // Wait before resending the message to not clog the channel
             sleep(Duration::from_millis(ack_handler.wait_time));
+            sleep(Duration::from_millis(1000));
 
             println!("Resending nmsg {}: {:?}", index, message);
+            message.update_time(tdma_utils::get_total_seconds());
             let dccl_message = message.to_bytes(comms_config.node_id, index, slot_acks.clone());
-            let modem_command = modem.message_out(0, &dccl_message);
+            let modem_command = modem.to_serial(0, &dccl_message);
             ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.propagation_time; // TODO: make func?
             // TODO: if still in slot after waittime, send message, else not enough time to resend
             //ack_handler.wait_time = calculate_propagation_time(&message.byte_msg, propagation_time_ms);
@@ -67,8 +70,8 @@ pub fn receive_message(modem: &mut dyn ModemDriver) -> Result<(Option<message_ty
     };
     let t_received = tdma_utils::get_total_seconds();
 
-    let (message_type, recieved_bytes) = modem.message_in(&received_serial)?;
-    // println!("Received message type: {}", message_type.as_str());
+    let (message_type, recieved_bytes) = modem.from_serial(&received_serial)?;
+
 
     // Can match on other message types here also, if many, might want to switch to a hashmap instead
     match message_type.as_str() { 
@@ -78,19 +81,18 @@ pub fn receive_message(modem: &mut dyn ModemDriver) -> Result<(Option<message_ty
             if dat_receive.local_flag { // Means that message was sent to this node
                 let encoded_packet = dat_receive.packet_data;
                 let packet_string = dccl::decode_output(&encoded_packet)?;
-                // println!("Decoded packet data: {:?}", packet_string);
-                // println!("made recieved message struct: {:?}", rec);
+ 
                 received_msg = Some(message_types::ReceivedMsg::from_string(&packet_string, t_received)?);
 
                 // TODO: can calculate range here?
 
-                // println!("Received local DAT_RECEIVE packet: {}", packet_string);
 
-                // If a broadcased message is read by a usbl modem
                 if modem.is_usbl() {
                     // let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
                     let aco_fix = dat_receive.aco_fix;
                     usbl_data = Some(message_types::UsblData::new(
+                        received_msg.as_ref().unwrap().node_id,
+                        t_received,
                         aco_fix.usbl_channels.unwrap_or(0),
                         aco_fix.usbl_rssi.unwrap_or(vec![0]),
                         aco_fix.usbl_azimuth.unwrap_or(0),
@@ -99,11 +101,16 @@ pub fn receive_message(modem: &mut dyn ModemDriver) -> Result<(Option<message_ty
                     ));
                 }
 
-            } else if !dat_receive.local_flag && modem.is_usbl() { // Assumes all messages are not broadcasted!
+            } else if !dat_receive.local_flag && modem.is_usbl() { // Assumes all messages are not broadcasted, lets usbl packetsniff all packages
                 // Handle USBL specific logic here
-                // let aco_fix = structs::ACOFIX_T::from_bytes(&dat_receive.aco_fix)?;
+                let encoded_packet = dat_receive.packet_data;
+                let packet_string = dccl::decode_output(&encoded_packet)?;
+
+                received_msg = Some(message_types::ReceivedMsg::from_string(&packet_string, t_received)?);
                 let aco_fix = dat_receive.aco_fix;
                 usbl_data = Some(message_types::UsblData::new(
+                    received_msg.as_ref().unwrap().node_id,
+                    t_received,
                     aco_fix.usbl_channels.unwrap_or(0),
                     aco_fix.usbl_rssi.unwrap_or(vec![0]),
                     aco_fix.usbl_azimuth.unwrap_or(0),

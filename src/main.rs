@@ -91,7 +91,8 @@ fn main() -> Result<(), RclrsError> {
     //     .trim()
     //     .parse::<f64>()
     //     .expect("Unable to parse start_time");
-    let initial_time: f64 = 0.0; // Hardcoded initial time for testing
+    //let initial_time: f64 = 0.0; // Hardcoded initial time for testing
+    let initial_time = tdma_utils::get_total_seconds() as f64;
     // TODO: clock synchronization
 
 
@@ -138,7 +139,7 @@ fn main() -> Result<(), RclrsError> {
                 while !tdma_scheduler.is_my_slot() {
                     match comm_protocols::receive_message(&mut modem) { 
                         Ok((received_msg, usbl_data)) => {
-
+                            
                             if let Some(received_msg) = received_msg {
                                 queues.from_modem.lock().unwrap().push(received_msg.to_string()); // To ROS2 network
 
@@ -146,10 +147,10 @@ fn main() -> Result<(), RclrsError> {
                             }
 
                             // If usbl data is present, process it
-                            if let Some(usbl) = usbl_data {
-                                println!("Received USBL data: {:?}", usbl);
+                            if let Some(usbl_data) = usbl_data {
+                                println!("Received USBL data: {:?}", usbl_data);
                                 // TODO: fix this, want another ros2 topic to_ekf
-                                queues.from_modem.lock().unwrap().push(format!("Received USBL data: {:?}", usbl)); // To ROS2 network
+                                queues.from_modem.lock().unwrap().push(format!("{:?}", usbl_data)); // To ROS2 network
                             }
 
                         }
