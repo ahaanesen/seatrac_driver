@@ -10,7 +10,7 @@ pub struct CommsConfig {
     pub tdma_slot_duration_s: u8,
     pub beacons_in_network: u8,
     pub node_id: u8,
-    pub propagation_time: u64, // in ms
+    pub msg_propgagation_speed: u64, // bytes per millisecond
 }
 
 impl CommsConfig {

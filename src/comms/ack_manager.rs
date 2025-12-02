@@ -58,11 +58,12 @@ impl SentMessage {
         }
     }
 
+    /// Updates the timestamp of the sent message in the case of retransmission
     pub fn update_time(&mut self, new_t: u64) {
         self.t = new_t;
     }
 
-    /// Adds a node ID to nodoid_received; returns true if the count matches a configured constant
+    /// Adds a node ID to nodeid_received; returns true if the count matches a configured constant
     pub fn add_node_ack(&mut self, node_id: i32, num_beacons: i32) -> bool {
         if !self.nodes_acked.contains(&node_id) {
             self.nodes_acked.push(node_id); // Add new node ID if not already present

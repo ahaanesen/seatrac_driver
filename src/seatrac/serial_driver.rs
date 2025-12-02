@@ -31,6 +31,35 @@ impl SerialModem {
         Ok(Self { port, usbl, node_id, propagation_time_ms })
     }
 
+    fn write_port(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+        self.port.write_all(data)?;
+        Ok(())
+    }
+
+    fn read_port(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut response = Vec::new();
+        let mut buffer = [0u8; 1];
+
+        loop {
+            match self.port.read(&mut buffer) {
+                Ok(0) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "Port closed while reading",
+                    )));
+                }
+                Ok(_) => match buffer[0] {
+                    b'\r' => continue,         // Ignore carriage return
+                    b'\n' => break,            // End of message
+                    byte => response.push(byte),
+                },
+                Err(e) => return Err(Box::new(e)),
+            }
+        }
+
+    Ok(response)
+    }
+
     /// Host-side only: change serial baud rate
     fn set_local_baud_rate(&mut self, baud_rate: u32) -> Result<(), Box<dyn Error>> {
         self.port.set_baud_rate(baud_rate)?;
@@ -43,7 +72,7 @@ impl SerialModem {
         // println!("Waiting for response: {:?}", expected_cid);
         let start = Instant::now();
         while start.elapsed() < timeout {
-            match self.receive() {
+            match self.read_port() {
                 Ok(data) => {
                     // println!("Received data while waiting for response: {:?}", String::from_utf8_lossy(&data));
                     if let Ok((cid, resp_payload, _)) = parse_response(&data) {
@@ -83,38 +112,6 @@ impl SerialModem {
 }
 
 impl ModemDriver for SerialModem {
-    fn send(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        self.port.write_all(data)?;
-        Ok(())
-    }
-    fn receive(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut response = Vec::new();
-        let mut buffer = [0u8; 1];
-
-        loop {
-            match self.port.read(&mut buffer) {
-                Ok(0) => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "Port closed while reading",
-                    )));
-                }
-                Ok(_) => match buffer[0] {
-                    b'\r' => continue,         // Ignore carriage return
-                    b'\n' => break,            // End of message
-                    byte => response.push(byte),
-                },
-                Err(e) => return Err(Box::new(e)),
-            }
-        }
-
-    Ok(response) // Return the full response
-/*         let mut buf = vec![0u8; 1024];
-        let n = self.port.read(&mut buf)?;
-        buf.truncate(n);
-        Ok(buf) */
-    }
-
     /// Configure both host and beacon via protocol (change baud rate, beacon ID, etc.)
     fn configure(&mut self, usbl: bool, baud_rate: u32, beacon_id: u8, salinity: u16) -> Result<(), Box<dyn Error>> {
         let mut reboot = false;
@@ -122,7 +119,7 @@ impl ModemDriver for SerialModem {
         // 1. Get current beacon settings
         let get_cmd = make_command(CID_E::CID_SETTINGS_GET, &[]);
         println!("Sending settings get command: {:?}", String::from_utf8_lossy(&get_cmd));
-        self.send(&get_cmd)?;
+        self.write_port(&get_cmd)?;
 
         let get_resp = self.wait_for_response(CID_E::CID_SETTINGS_GET, Duration::from_secs(10))?;
         let mut settings = SETTINGS_T::from_bytes(&get_resp)?;
@@ -133,7 +130,6 @@ impl ModemDriver for SerialModem {
         // } // Not necessary, as DAT_RECIEVE will generate USBL info if on a usbl modem
         settings.status_flags = enums::STATUSMODE_E::STATUS_MODE_MANUAL.to_u8(); // Set to manual mode to control status message contents
         settings.status_mode = enums::STATUSMODE_E::STATUS_MODE_MANUAL; // Set to manual mode to control status message contents
-        // TODO: doesnt work yet
 
         let current_baud = settings.uart_main_baud.clone();
         let new_baud = enums::BAUDRATE_E::from_u32(baud_rate).unwrap_or(current_baud.clone());
@@ -153,7 +149,7 @@ impl ModemDriver for SerialModem {
         // 4. Send new settings to beacon
         let settings_bytes = settings.to_bytes()?;
         let set_cmd = make_command(CID_E::CID_SETTINGS_SET, &settings_bytes);
-        self.send(&set_cmd)?;
+        self.write_port(&set_cmd)?;
 
         let set_resp = self.wait_for_response(CID_E::CID_SETTINGS_SET, Duration::from_secs(10))?;
         match set_resp.get(0).map(|&b| CST_E::from_u8(b)) {
@@ -163,7 +159,7 @@ impl ModemDriver for SerialModem {
 
         // 5. Save settings to EEPROM if needed
         let save_cmd = make_command(CID_E::CID_SETTINGS_SAVE, &[]);
-        self.send(&save_cmd)?;
+        self.write_port(&save_cmd)?;
         let save_resp = self.wait_for_response(CID_E::CID_SETTINGS_SAVE, Duration::from_secs(2))?;
         match save_resp.get(0).map(|&b| CST_E::from_u8(b)) {
             Some(Some(status)) => log::info!("Settings saved, status: {:?}", status),
@@ -174,7 +170,7 @@ impl ModemDriver for SerialModem {
         // TODO: check if this works. reboot=true currently commented out
         if reboot {
             let reboot_cmd = make_command_u16(CID_E::CID_SYS_REBOOT, 0x6A95);
-            self.send(&reboot_cmd)?;
+            self.write_port(&reboot_cmd)?;
             log::info!("Sent reboot command to beacon.");
 
             self.set_local_baud_rate(baud_rate)?;
@@ -197,7 +193,7 @@ impl ModemDriver for SerialModem {
         let environment_flag = STATUS_BITS_T::ENVIRONMENT.bits();
         let get_cmd = make_command(CID_E::CID_STATUS, &[environment_flag]);
         // println!("Sending status get command: {:?}", String::from_utf8_lossy(&get_cmd));
-        self.send(&get_cmd)?;
+        self.write_port(&get_cmd)?;
         let response_payload = self.wait_for_response(CID_E::CID_STATUS, Duration::from_secs(3))?;
         //let (_cid, payload, _rec_checksum) = parse_response(&response)?;
         let status = STATUS_RESPONSE::from_bytes(&response_payload)?;
@@ -239,17 +235,23 @@ impl ModemDriver for SerialModem {
         }
     }
 
-    fn to_serial(&self, destination_id: u8, data: &[u8]) -> Vec<u8> {
+    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<(Vec<u8>), Box<dyn Error>> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
         // println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
         // println!("{:?}", dat_msg);
         // make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
-        prepare_message(CID_E::CID_DAT_SEND, dat_msg)
+        let serialized_message = prepare_message(CID_E::CID_DAT_SEND, dat_msg);
+        self.port.write_all(&serialized_message)?;
+        Ok(serialized_message)
     }
 
     // Parses a raw byte message received from the modem into command id and byte payload
-    fn from_serial(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>> {
-        let (cid, _payload, _checksum, byte_representation) = parse_message(data.to_vec())?;
+    fn receive(&mut self) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+        let received_serial = match self.read_port() {
+            Ok(data) => data,
+            Err(e) => return Err(e),
+        };
+        let (cid, _payload, _checksum, byte_representation) = parse_message(received_serial.to_vec())?;
         // println!("Received {} message", cid.to_string());
         // TODO: change to only allow dat_receive?
         Ok((cid.to_string().into(), byte_representation))

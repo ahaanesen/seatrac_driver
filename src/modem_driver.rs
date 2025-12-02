@@ -2,12 +2,10 @@ use std::fs;
 use std::error::Error;
 use serde_json;
 pub trait ModemDriver {
-    /// Sends raw bytes or a message struct, returns Result<(), Error>
-    fn send(&mut self, data: &[u8]) -> Result<(), Box<dyn std::error::Error>>;
+    // These methods made local local (writ_port and read_port) to avoid exposing serialport dependency outside driver
+    // fn write_port(&mut self, data: &[u8]) -> Result<(), Box<dyn std::error::Error>>;
+    // fn read_port(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
 
-    /// Receives raw bytes or a message struct, returns Result<Vec<u8>, Error>
-    fn receive(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
-    /// Optional: configure modem, set baudrate, etc.
 
     /// Configure the modem with the given parameters.
     /// - `baud_rate`: The desired baud rate for communication.
@@ -18,11 +16,14 @@ pub trait ModemDriver {
     
     fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>>;
 
-    /// Making a raw byte message of given (dccl encoded) data that the modem can send
-    fn to_serial(&self, destination_id: u8, data: &[u8]) -> Vec<u8>;
 
-    /// Parses a raw byte message received from the modem into message type and byte payload
-    fn from_serial(&self, data: &[u8]) -> Result<(String, Vec<u8>), Box<dyn Error>>;
+    /// Given a destination ID and data payload, sends the data via the modem.
+    /// Returns the serialized message as a vector of bytes.
+    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<(Vec<u8>), Box<dyn Error>>;
+
+    /// Receives data from the modem
+    /// Returns a tuple of message type string and received bytes
+    fn receive(&mut self) -> Result<(String, Vec<u8>), Box<dyn Error>>;
 
     fn is_usbl(&self) -> bool;
 }
