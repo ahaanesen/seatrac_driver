@@ -16,6 +16,7 @@ pub struct MessageQueues {
 pub struct RosBridge {
     worker: Worker<Option<String>>,
     publisher: Publisher<StringMsg>,
+    _subscription: Subscription<StringMsg>,
     pub queues: MessageQueues,
 }
 
@@ -35,14 +36,14 @@ impl RosBridge {
 
             // Subscription: push incoming ROS data into send queue
             let in_topic = format!("/{}/input", node_name);
-            worker.create_subscription::<StringMsg, _>(
+            let subscription = worker.create_subscription::<StringMsg, _>(
                 in_topic.as_str(),
                 move |data: &mut Option<String>, msg: StringMsg| {
                     *data = Some(msg.data);
                 },
             )?;
 
-            Ok(Self { worker, publisher, queues })
+            Ok(Self { worker, publisher, _subscription: subscription, queues })
         }
 
     /// Publish all messages currently waiting in the receive queue
