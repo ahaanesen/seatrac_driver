@@ -3,5 +3,5 @@ pub mod tdma_scheduler;
 pub mod dccl;
 pub mod ack_manager;
 pub mod message_types;
-pub mod comm_protocols;
+pub mod protocols;
 pub mod ros2_node;

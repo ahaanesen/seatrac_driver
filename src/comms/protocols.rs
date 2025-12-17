@@ -31,13 +31,13 @@ pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn 
 }
 
 // / Sends a message to the specified destination via the modem
-pub fn send_message(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, msg_idx: i32, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
-    let (destination_id, new_msg) = message_types::parse_new_msg(&msg).expect("Failed to parse new message from ROS2");
-    let dccl_message = new_msg.to_bytes(comms_config.agent_id, msg_idx, acks_to_send.clone());
+pub fn send_message(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, msg_idx: i32, destination_id: u8, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
+    let dccl_message = msg.to_bytes(comms_config.agent_id, msg_idx, acks_to_send.clone());
 
     if let Ok(modem_command) = modem.send(destination_id, &dccl_message) {
-        ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed; // TODO: make func?
+        return mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed // TODO: make func?
     }
+    0
 }
 
 
