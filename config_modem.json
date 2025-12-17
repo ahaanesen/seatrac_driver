@@ -6,8 +6,6 @@
     "usbl": false,
 
     "beacon_id": 1,
-
-    "propagation_time": 80,
     "salinity": 0
 }
 

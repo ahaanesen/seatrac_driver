@@ -1,7 +1,7 @@
 use std::fs;
 use std::error::Error;
 use serde_json;
-pub trait ModemDriver {
+pub trait ModemAbstraction {
     // These methods made local local (writ_port and read_port) to avoid exposing serialport dependency outside driver
     // fn write_port(&mut self, data: &[u8]) -> Result<(), Box<dyn std::error::Error>>;
     // fn read_port(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
@@ -19,7 +19,7 @@ pub trait ModemDriver {
 
     /// Given a destination ID and data payload, sends the data via the modem.
     /// Returns the serialized message as a vector of bytes.
-    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<(Vec<u8>), Box<dyn Error>>;
+    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>>;
 
     /// Receives data from the modem
     /// Returns a tuple of message type string and received bytes
@@ -29,7 +29,7 @@ pub trait ModemDriver {
 }
 
 #[derive(serde::Deserialize)]
-pub struct DriverConfig {
+pub struct ModemConfig {
     pub port_name: String,
     pub baud_rate: u32,
 
@@ -37,16 +37,14 @@ pub struct DriverConfig {
     pub usbl: bool, // true if using USBL modem
 
     pub beacon_id: u8,
-
-    pub propagation_time: u32, // in ms
     pub salinity: u16, // in deci-parts-per-thousand
 
 }
-impl DriverConfig {
+impl ModemConfig {
     pub fn load_from_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
-        let config: DriverConfig = serde_json::from_str(&contents)
+        let config: ModemConfig = serde_json::from_str(&contents)
             .map_err(|e| format!("Failed to parse JSON configuration: {}", e))?;
         Ok(config)
     }

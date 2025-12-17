@@ -1,13 +1,8 @@
-// Import required modules for serial communication and protocol handling
-// use crate::modem::identifiers::CommandIdentificationCode; // Enum for command identification codes
-// use crate::modem::record::DAT_SEND; // Structure for DAT messages
-// use serialport::SerialPort; // Trait for serial port functionality
 use crate::seatrac::enums::{self, CID_E};
-use crate::seatrac::structs; // Replace with actual path
+use crate::seatrac::structs;
 use hex;
 use std::error::Error;
 use std::io;
-// use crate::seatrac::structs::{SETTINGS_T, XCVR_USBL, XCVR_BASELINES};
 
 
 const CRC_POLY: u16 = 0xA001; // CRC polynomial for checksum calculation
@@ -89,34 +84,6 @@ pub fn prepare_message(cid: CID_E, msg: structs::DAT_SEND) -> Vec<u8> {
     message // Return the prepared message
 }
 
-// From 5.2 Message Format
-/// Create ASCII command message
-/// # Arguments
-/// * `cid` - The command identification code
-/// * `payload` - The payload data as a byte slice
-/// # Returns
-/// * A vector of bytes representing the complete ASCII command message
-// pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
-//     // CID as two ASCII hex chars
-//     let cid_str = format!("{:02X}", cid.to_u8());
-//     // Encode payload as hex
-//     let payload_hex = hex::encode(payload);
-//     // Build message without checksum/delimiters
-//     let content = format!("{}{}", cid_str, payload_hex);
-//     // ASCII bytes (for CRC calculation)
-//     let content_bytes = content.as_bytes();
-//     let checksum = calc_crc16(content_bytes);
-//     let checksum_bytes = checksum.to_le_bytes();
-//     let checksum_str = format!("{:02X}{:02X}", checksum_bytes[0], checksum_bytes[1]);
-//     // Full message: #CIDPayloadCSUM<CR><LF>
-//     let mut msg = Vec::new();
-//     msg.push(b'#');
-//     msg.extend_from_slice(content_bytes);
-//     msg.extend_from_slice(checksum_str.as_bytes());
-//     msg.push(b'\r');
-//     msg.push(b'\n');
-//     msg
-// }
 
 pub fn make_command(cid: enums::CID_E, payload: &[u8]) -> Vec<u8> {
     // Compute CRC over binary bytes: CID byte followed by payload bytes

@@ -88,7 +88,7 @@ impl SentMessage {
 }
 
 /// Struct to manage all sent messages awaiting acknowledgment
-pub struct SentMsgManager {
+pub struct AcknowledgmentManager {
     messages: HashMap<i32, SentMessage>, // Maps message ID to SentMessage
     pub message_index: i32, // TODO: change to something better than i32
     received_acks: Vec<MsgReceivedAck>,
@@ -97,9 +97,9 @@ pub struct SentMsgManager {
     pub wait_time: u64,
 }
 
-impl SentMsgManager {
+impl AcknowledgmentManager {
     pub fn new() -> Self {
-        SentMsgManager {
+        AcknowledgmentManager {
             messages: HashMap::new(),
             message_index: 0,
             received_acks: vec![],
@@ -122,7 +122,7 @@ impl SentMsgManager {
 
 
     /// Checks if there are any sent messages awaiting acknowledgment
-    pub fn is_empty(&self) -> bool {
+    pub fn has_unacked_messages(&self) -> bool {
         self.messages.is_empty()
     }
 

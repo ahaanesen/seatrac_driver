@@ -6,18 +6,18 @@ use serde_json;
 
 
 #[derive(serde::Deserialize)]
-pub struct CommsConfig {
+pub struct CommunicationConfig {
     pub tdma_slot_duration_s: u8,
-    pub beacons_in_network: u8,
-    pub node_id: u8,
+    pub network_participant_count: u8,
+    pub agent_id: u8,
     pub msg_propgagation_speed: u64, // bytes per millisecond
 }
 
-impl CommsConfig {
+impl CommunicationConfig {
     pub fn load_from_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
-        let config: CommsConfig = serde_json::from_str(&contents)
+        let config: CommunicationConfig = serde_json::from_str(&contents)
             .map_err(|e| format!("Failed to parse JSON configuration: {}", e))?;
         Ok(config)
     }
@@ -37,11 +37,11 @@ pub fn get_total_seconds() -> u64 {
 /// # Args:
 /// - `comms_config`: Reference to the communication configuration settings.
 /// - `wait_time_ms`: The propagation time in milliseconds of the previously sent message.
-pub fn get_slot_after_propag(comms_config: &CommsConfig, wait_time_ms: u64) -> u8 {
+pub fn get_slot_after_propag(comms_config: &CommunicationConfig, wait_time_ms: u64) -> u8 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as u64 + wait_time_ms / 1000;
-    let cycle_time = comms_config.tdma_slot_duration_s as u64 * comms_config.beacons_in_network as u64;
+    let cycle_time = comms_config.tdma_slot_duration_s as u64 * comms_config.network_participant_count as u64;
     ((now % cycle_time) / comms_config.tdma_slot_duration_s as u64) as u8
 }

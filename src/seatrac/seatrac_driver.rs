@@ -2,7 +2,7 @@ use serialport::{SerialPort, DataBits, Parity, StopBits, FlowControl};
 use std::time::{Duration, Instant};
 use std::error::Error;
 use std::io::{Read, Write};
-use crate::modem_driver::ModemDriver;
+use crate::modem_driver::ModemAbstraction;
 use crate::seatrac::enums::{self, CID_E, CST_E};
 use crate::seatrac::ascii_message::{make_command, make_command_u16, parse_message, parse_response, prepare_message};
 // use crate::seatrac::helpers::calculate_propagation_time;
@@ -11,15 +11,14 @@ use crate::seatrac::structs::{DAT_SEND, SETTINGS_T, STATUS_BITS_T, STATUS_RESPON
 
 static _DEFAULT_BAUD_RATE: u32 = 115200;
 
-pub struct SerialModem {
-    port: Box<dyn SerialPort>,
+pub struct SeatracModem {
+    serial_port: Box<dyn SerialPort>,
     usbl: bool,
     node_id: u8,
-    propagation_time_ms: u32
 }
 
-impl SerialModem {
-    pub fn new(port_name: &str, baud_rate: u32, usbl: bool, node_id: u8, propagation_time_ms: u32) -> Result<Self, Box<dyn Error>> {
+impl SeatracModem {
+    pub fn new(port_name: &str, baud_rate: u32, usbl: bool, node_id: u8) -> Result<Self, Box<dyn Error>> {
         let port = serialport::new(port_name, baud_rate)
                 .timeout(Duration::from_millis(50))
                 .stop_bits(StopBits::Two)
@@ -28,11 +27,11 @@ impl SerialModem {
                 .data_bits(DataBits::Eight)
                 .open()
                 .map_err(|e| format!("Failed to open port '{}': {e}", port_name))?;
-        Ok(Self { port, usbl, node_id, propagation_time_ms })
+        Ok(Self { serial_port: port, usbl, node_id })
     }
 
     fn write_port(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        self.port.write_all(data)?;
+        self.serial_port.write_all(data)?;
         Ok(())
     }
 
@@ -41,7 +40,7 @@ impl SerialModem {
         let mut buffer = [0u8; 1];
 
         loop {
-            match self.port.read(&mut buffer) {
+            match self.serial_port.read(&mut buffer) {
                 Ok(0) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
@@ -62,7 +61,7 @@ impl SerialModem {
 
     /// Host-side only: change serial baud rate
     fn set_local_baud_rate(&mut self, baud_rate: u32) -> Result<(), Box<dyn Error>> {
-        self.port.set_baud_rate(baud_rate)?;
+        self.serial_port.set_baud_rate(baud_rate)?;
         Ok(())
     }
 
@@ -95,23 +94,11 @@ impl SerialModem {
         Err(format!("Timeout waiting for response with CID: {:?}", expected_cid).into())
     }
 
-    // Helper to clamp floats into u8 range safely
-    fn clamp_to_u8(v: f64) -> u8 {
-        if v.is_nan() {
-            return 0;
-        }
-        if v <= 0.0 {
-            0
-        } else if v >= 255.0 {
-            255
-        } else {
-            v as u8
-        }
-    }
+
 
 }
 
-impl ModemDriver for SerialModem {
+impl ModemAbstraction for SeatracModem {
     /// Configure both host and beacon via protocol (change baud rate, beacon ID, etc.)
     fn configure(&mut self, usbl: bool, baud_rate: u32, beacon_id: u8, salinity: u16) -> Result<(), Box<dyn Error>> {
         let mut reboot = false;
@@ -188,6 +175,20 @@ impl ModemDriver for SerialModem {
     }
 
     fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>> {
+        // Helper to clamp floats into u8 range safely
+        let clamp_to_u8 = |v: f64| -> u8 {
+            if v.is_nan() {
+                return 0;
+            }
+            if v <= 0.0 {
+                0
+            } else if v >= 255.0 {
+                255
+            } else {
+                v as u8
+            }
+        };
+
         // println!("Getting position for node ID {}", self.node_id);
         // Create a command with the STATUS_BITS_T::ENVIRONMENT flag set
         let environment_flag = STATUS_BITS_T::ENVIRONMENT.bits();
@@ -210,25 +211,25 @@ impl ModemDriver for SerialModem {
             0 => {
                 let x = 2.0 * t as f64;
                 let y = 5.0 * (0.1 * t as f64).sin();
-                let x_u8 = Self::clamp_to_u8(x);
-                let y_u8 = Self::clamp_to_u8(y);
-                let z_u8 = Self::clamp_to_u8(z);
+                let x_u8 = clamp_to_u8(x);
+                let y_u8 = clamp_to_u8(y);
+                let z_u8 = clamp_to_u8(z);
                 Ok(vec![x_u8, y_u8, z_u8])
             }
             1 => {
                 let x = 2.0 * t as f64; 
                 let y = 20.0 - 4.0 * (0.07 * t as f64).sin();
-                let x_u8 = Self::clamp_to_u8(x);
-                let y_u8 = Self::clamp_to_u8(y);
-                let z_u8 = Self::clamp_to_u8(z);
+                let x_u8 = clamp_to_u8(x);
+                let y_u8 = clamp_to_u8(y);
+                let z_u8 = clamp_to_u8(z);
                 Ok(vec![x_u8, y_u8, z_u8])
             }
             2 => {
                 let x = 15.0 * (0.05 * t as f64).cos();
                 let y = 15.0 * (0.05 * t as f64).sin();
-                let x_u8 = Self::clamp_to_u8(x);
-                let y_u8 = Self::clamp_to_u8(y);
-                let z_u8 = Self::clamp_to_u8(z);
+                let x_u8 = clamp_to_u8(x);
+                let y_u8 = clamp_to_u8(y);
+                let z_u8 = clamp_to_u8(z);
                 Ok(vec![x_u8, y_u8, z_u8])
             }
             _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Error: get_position received an invalid node_id"))), // Handle invalid node IDs
@@ -241,7 +242,7 @@ impl ModemDriver for SerialModem {
         // println!("{:?}", dat_msg);
         // make_command(CID_E::CID_DAT_SEND, &dat_msg.to_bytes())
         let serialized_message = prepare_message(CID_E::CID_DAT_SEND, dat_msg);
-        self.port.write_all(&serialized_message)?;
+        self.serial_port.write_all(&serialized_message)?;
         Ok(serialized_message)
     }
 

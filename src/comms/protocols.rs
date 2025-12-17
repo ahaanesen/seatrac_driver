@@ -1,11 +1,11 @@
 use std::{mem, thread::sleep, time::{Duration}};
-use crate::{comms::{ack_manager::{SentMessage, SentMsgManager}, dccl, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::{self, CommsConfig}}, 
-            modem_driver::ModemDriver, 
+use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::{self, CommunicationConfig}}, 
+            modem_driver::ModemAbstraction, 
             seatrac::{self, structs}};
 
 
 /// Broadcasts a status message with the nodes position
-pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, initial_time: u64, ack_handler: &mut SentMsgManager, slot_acks: &Vec<i32>) {
+pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, initial_time: u64, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
     //let t_send = tdma_utils::get_total_seconds() - initial_time;
     let t_send = tdma_utils::get_total_seconds();
 
@@ -19,7 +19,7 @@ pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDri
         ack_handler.message_index += 1;
         let new_msg = ack_handler.queue_new_msg.pop_front().expect("Empty queue");
         ack_handler.add_message(ack_handler.message_index, SentMessage::new(new_msg.position, new_msg.t));
-        let dccl_message = new_msg.to_bytes(comms_config.node_id, ack_handler.message_index, slot_acks.clone());
+        let dccl_message = new_msg.to_bytes(comms_config.agent_id, ack_handler.message_index, slot_acks.clone());
 
         println!("Broadcasting status message: {:?}", dccl::decode_output(&dccl_message));
         if let Ok(modem_command) = modem.send(0, &dccl_message) {
@@ -30,9 +30,19 @@ pub fn broadcast_status_msg(comms_config: &CommsConfig, modem: &mut dyn ModemDri
     
 }
 
+// / Sends a message to the specified destination via the modem
+pub fn send_message(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, msg_idx: i32, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
+    let (destination_id, new_msg) = message_types::parse_new_msg(&msg).expect("Failed to parse new message from ROS2");
+    let dccl_message = new_msg.to_bytes(comms_config.agent_id, msg_idx, acks_to_send.clone());
+
+    if let Ok(modem_command) = modem.send(destination_id, &dccl_message) {
+        ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed; // TODO: make func?
+    }
+}
+
 
 /// Resends all messages in the SentMsgManager that have not been acknowledged
-pub fn resend_messages(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, ack_handler: &mut SentMsgManager, slot_acks: &Vec<i32>) {
+pub fn resend_messages(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
     for (index, mut message) in ack_handler.list_messages() {
         if index != ack_handler.message_index { // Don't resend the just sent message
             // Wait before resending the message to not clog the channel
@@ -41,7 +51,7 @@ pub fn resend_messages(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, 
 
             println!("Resending nmsg {}: {:?}", index, message);
             message.update_time(tdma_utils::get_total_seconds());
-            let dccl_message = message.to_bytes(comms_config.node_id, index, slot_acks.clone());
+            let dccl_message = message.to_bytes(comms_config.agent_id, index, slot_acks.clone());
 
             if let Ok(modem_command) = modem.send(0, &dccl_message) {
             ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed; // TODO: make func?
@@ -49,7 +59,7 @@ pub fn resend_messages(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, 
             // TODO: if still in slot after waittime, send message, else not enough time to resend
 
             let slot_after_propag = tdma_utils::get_slot_after_propag(comms_config, ack_handler.wait_time);
-            if slot_after_propag != comms_config.node_id {
+            if slot_after_propag != comms_config.agent_id {
                 break;
             } 
         }
@@ -58,9 +68,8 @@ pub fn resend_messages(comms_config: &CommsConfig, modem: &mut dyn ModemDriver, 
 }
 
 
-/// Checks for incoming messages during non-assigned slots
-/// Returns a tuple of optional received dat message and USBL data
-pub fn receive_message(modem: &mut dyn ModemDriver) -> Result<(Option<message_types::ReceivedMsg>, Option<message_types::UsblData>), Box<dyn std::error::Error>> {
+/// Receives a message from the modem and processes it accordingly
+pub fn receive_message(modem: &mut dyn ModemAbstraction) -> Result<(Option<message_types::ReceivedMsg>, Option<message_types::UsblData>), Box<dyn std::error::Error>> {
     let mut received_msg = None;
     let mut usbl_data: Option<message_types::UsblData> = None; 
 

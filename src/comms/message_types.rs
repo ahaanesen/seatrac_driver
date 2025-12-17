@@ -33,6 +33,45 @@ impl NewMsg{
             packet_data
     }
 }
+
+pub fn parse_new_msg(data: &str) -> Result<(u8, PositionalCoordinates), Box<dyn std::error::Error>> {
+    let tokens: Vec<&str> = data.split_whitespace().collect();
+    let mut destination_id: u8 = 0;
+    let mut x: u8 = 0;
+    let mut y: u8 = 0;
+    let mut z: u8 = 0;
+    // let mut t: u64 = 0;
+
+    for token in tokens {
+        if let Some(colon_pos) = token.find(':') {
+            let key = token[..colon_pos].trim();
+            let val = token[colon_pos + 1..].trim();
+
+            match key {
+                "destination_id" => destination_id = val.parse()?,
+                "x" => x = val.parse()?,
+                "y" => y = val.parse()?,
+                "z" => z = val.parse()?,
+               // "t" => t = val.parse()?,
+                _ => {}
+            }
+        }
+    }
+
+    let position = PositionalCoordinates::new(x, y, z);
+    // let new_msg = NewMsg::new(position, t);
+    Ok((destination_id, position))
+}
+
+#[test]
+fn parse_new_msg_basic() {
+    let data = "destination_id:1 x:10 y:20 z:30";
+    let (destination_id, position) = parse_new_msg(data).unwrap();
+
+    assert_eq!(destination_id, 1u8);
+    assert_eq!(position, PositionalCoordinates::new(10, 20, 30));
+}
+
 /// FieldMsg struct to hold coordinates
 /// Represents the positional coordinates of the node
 /// fields format: vec![x as u8, y as u8, z as u8]
@@ -50,6 +89,28 @@ impl PositionalCoordinates {
 
     pub fn to_string(&self) -> String {
         format!("x:{} y:{} z:{}", self.x, self.y, self.z)
+    }
+    pub fn from_string(data: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let tokens: Vec<&str> = data.split_whitespace().collect();
+        let mut x: u8 = 0;
+        let mut y: u8 = 0;
+        let mut z: u8 = 0;
+
+        for token in tokens {
+            if let Some(colon_pos) = token.find(':') {
+                let key = token[..colon_pos].trim();
+                let val = token[colon_pos + 1..].trim();
+
+                match key {
+                    "x" => x = val.parse()?,
+                    "y" => y = val.parse()?,
+                    "z" => z = val.parse()?,
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(PositionalCoordinates::new(x, y, z))
     }
 }
 
