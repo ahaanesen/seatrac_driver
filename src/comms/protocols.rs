@@ -4,8 +4,9 @@ use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, mes
             seatrac::{self, structs}};
 
 
+#[allow(dead_code)]
 /// Broadcasts a status message with the nodes position
-pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, initial_time: u64, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
+pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, _initial_time: u64, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
     //let t_send = tdma_utils::get_total_seconds() - initial_time;
     let t_send = tdma_utils::get_total_seconds();
 

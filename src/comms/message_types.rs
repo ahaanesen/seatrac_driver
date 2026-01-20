@@ -90,28 +90,28 @@ impl PositionalCoordinates {
     pub fn to_string(&self) -> String {
         format!("x:{} y:{} z:{}", self.x, self.y, self.z)
     }
-    pub fn from_string(data: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let tokens: Vec<&str> = data.split_whitespace().collect();
-        let mut x: u8 = 0;
-        let mut y: u8 = 0;
-        let mut z: u8 = 0;
+    // pub fn from_string(data: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    //     let tokens: Vec<&str> = data.split_whitespace().collect();
+    //     let mut x: u8 = 0;
+    //     let mut y: u8 = 0;
+    //     let mut z: u8 = 0;
 
-        for token in tokens {
-            if let Some(colon_pos) = token.find(':') {
-                let key = token[..colon_pos].trim();
-                let val = token[colon_pos + 1..].trim();
+    //     for token in tokens {
+    //         if let Some(colon_pos) = token.find(':') {
+    //             let key = token[..colon_pos].trim();
+    //             let val = token[colon_pos + 1..].trim();
 
-                match key {
-                    "x" => x = val.parse()?,
-                    "y" => y = val.parse()?,
-                    "z" => z = val.parse()?,
-                    _ => {}
-                }
-            }
-        }
+    //             match key {
+    //                 "x" => x = val.parse()?,
+    //                 "y" => y = val.parse()?,
+    //                 "z" => z = val.parse()?,
+    //                 _ => {}
+    //             }
+    //         }
+    //     }
 
-        Ok(PositionalCoordinates::new(x, y, z))
-    }
+    //     Ok(PositionalCoordinates::new(x, y, z))
+    // }
 }
 
 #[derive(Debug, Clone, PartialEq)]

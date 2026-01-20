@@ -13,9 +13,11 @@ pub struct MessageQueues {
 
 
 #[derive(Clone)]
+#[allow(unused)]
 pub struct RosBridge {
     worker: Worker<Option<String>>,
     publisher: Publisher<StringMsg>,
+    subscription: Subscription<StringMsg>,
     pub queues: MessageQueues,
 }
 
@@ -35,37 +37,18 @@ impl RosBridge {
 
             // Subscription: push incoming ROS data into send queue
             let in_topic = format!("/{}/input", node_name);
-            worker.create_subscription::<StringMsg, _>(
+            let to_modem_clone = Arc::clone(&queues.to_modem);
+            let subscription = node.create_subscription::<StringMsg, _>(
                 in_topic.as_str(),
-                move |data: &mut Option<String>, msg: StringMsg| {
-                    *data = Some(msg.data);
+                move |msg: StringMsg| {
+                    // Handle incoming message from subscription
+                    let mut queue = to_modem_clone.lock().unwrap();
+                    queue.push(msg.data);
                 },
             )?;
 
-            Ok(Self { worker, publisher, queues })
+            Ok(Self { worker, publisher, queues, subscription })
         }
-
-    /// Publish all messages currently waiting in the receive queue
-    pub fn queue_from_subscription(&self) -> Result<(), RclrsError> {
-        // move a clone of the Arc<Mutex<Vec<String>>> into the closure
-        let queue_arc = Arc::clone(&self.queues.to_modem);
-
-        // run a closure that takes ownership of the queue Arc
-        // the closure receives &mut Option<String> and moves the message out with take()
-        drop(
-            self.worker.run(move |data: &mut Option<String>| -> Result<(), RclrsError> {
-            if let Some(msg) = data.take() {
-                let mut queue = queue_arc.lock().unwrap(); // or map_err on poisoning if you prefer
-                queue.push(msg);
-                Ok(())
-            } else {
-                // no message available — treat as no-op or return an error if that's required
-                Ok(())
-            }
-            })
-        );
-        Ok(())
-    }
 
 
     /// Publish all messages currently waiting in the receive queue

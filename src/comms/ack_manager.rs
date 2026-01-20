@@ -87,6 +87,7 @@ impl SentMessage {
     }
 }
 
+#[allow(dead_code)]
 /// Struct to manage all sent messages awaiting acknowledgment
 pub struct AcknowledgmentManager {
     messages: HashMap<i32, SentMessage>, // Maps message ID to SentMessage
