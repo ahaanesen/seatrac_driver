@@ -30,7 +30,19 @@ In the ROS2 network, each agent becomes visible as nodes called "seatrac_<node_i
 
 ### Dependencies
 
-* ros2_rust
+#### ros2_rust environment setup
+Create a new environment (the python version used for development was Python 3.12.3)
+```
+python -m venv ros2_rust_env
+```
+Activate it
+```
+source ros2_rust_env/bin/activate
+```
+Install all the packages
+```
+pip install -r requirements.txt
+```
 
 ### Installing
 
@@ -44,7 +56,7 @@ In the ROS2 network, each agent becomes visible as nodes called "seatrac_<node_i
 * Make sure both config_comms and config_modem are correct
 * Run with
 ```
-cargo run <node_id> [usbl]
+cargo run
 ```
 * With broadcasting disabled, it is necessary to publish the messages to the /input topic with this format:
 ```
