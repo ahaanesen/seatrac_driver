@@ -29,20 +29,19 @@ In the ROS2 network, each agent becomes visible as nodes called "seatrac_<node_i
 ## Getting Started
 
 ### Dependencies
+#### ROS 2 + r2r setup
+This project uses the [r2r](https://github.com/sequenceplanner/r2r) crate for ROS 2 integration. Unlike ros2_rust, no Python virtual environment or colcon build is required.
 
-#### ros2_rust environment setup
-Create a new environment (the python version used for development was Python 3.12.3)
+1. Install ROS 2 (e.g., Humble or Jazzy)
+2. Source your ROS 2 environment:
 ```
-python -m venv ros2_rust_env
+source /opt/ros/<distro>/setup.bash
 ```
-Activate it
+3. Build with cargo:
 ```
-source ros2_rust_env/bin/activate
+cargo build
 ```
-Install all the packages
-```
-pip install -r requirements.txt
-```
+
 
 ### Installing
 

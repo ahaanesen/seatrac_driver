@@ -1,4 +1,5 @@
-use rclrs::*;
+use core::task;
+use std::sync::{Arc, Mutex};
 use std::{env, thread::{self, sleep}, time::Duration};
 
 mod modem_driver;
@@ -14,8 +15,9 @@ use crate::comms::{ack_manager::{AcknowledgmentManager, SentMessage},
 static DEFAULT_BAUD_RATE: u32 = 115200;
 
 
-/// Run with "cargo run <node_id> [usbl]"
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configurations
     let mut driver_config = modem_driver::ModemConfig::load_from_file("config_modem.json").unwrap_or_else(|e| {
         panic!("Failed to load driver configuration: {}", e);
@@ -27,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     // Parse command-line arguments to set node id and optional usbl flag
-    let args: Vec<String> = env::args().collect();
+/*     let args: Vec<String> = env::args().collect();
     let agent_id = if args.len() > 1 {
         args[1].parse::<u8>().unwrap_or_else(|_| {
             panic!("Invalid node ID argument. Please provide a valid u8 value.");
@@ -43,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     driver_config.beacon_id = agent_id;
     driver_config.usbl = usbl || false;
 
-    comms_config.agent_id = agent_id;
+    comms_config.agent_id = agent_id; */
 
 
     // Modem init
@@ -69,8 +71,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ROS2 init
     let node_name = "seatrac_".to_string() + &comms_config.agent_id.to_string(); //most important the comms and ros2 node have the same id
-    let mut executor = Context::default_from_env()?.create_basic_executor();
-    let bridge_node = ros2_node::RosBridge::new(&executor, &node_name)?;
+    let ctx = r2r::Context::create()?;
+    let node = r2r::Node::create(ctx, &node_name, "")?;
+    let arc_node = Arc::new(Mutex::new(node));
+
+    let bridge_node = ros2_node::RosBridge::new(&arc_node, &node_name)?;
     let queues = bridge_node.queues.clone();
 
 
@@ -89,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     .parse::<f64>()
     //     .expect("Unable to parse start_time");
     //let initial_time: f64 = 0.0; // Hardcoded initial time for testing
-    let _initial_time = tdma_utils::get_total_seconds() as f64;
+    let initial_time = tdma_utils::get_total_seconds() as f64;
     // TODO: clock synchronization
 
 
@@ -102,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if tdma_scheduler.is_my_slot() {
                 println!("\n \n Node {}: It's my slot to send! ", comms_config.agent_id);
                 let acks_to_send = ack_handler.prepare_round();
-                // broadcast::broadcast_status_msg(&comms_config, &mut modem, initial_time as u64, &mut ack_handler, &acks_to_send);
+                protocols::broadcast_status_msg(&comms_config, &mut modem, initial_time as u64, &mut ack_handler, &acks_to_send);
 
                 while tdma_scheduler.is_my_slot() {
                     // Send queued messages from ROS
@@ -179,7 +184,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
 
-    executor.spin(rclrs::SpinOptions::default()).first_error()?;
+    // Spin the node in a blocking task (same pattern as kf_node.rs)
+    let handle = tokio::task::spawn_blocking(move || loop {
+        {
+            arc_node
+                .lock()
+                .unwrap()
+                .spin_once(std::time::Duration::from_micros(5));
+        }
+        std::thread::sleep(std::time::Duration::from_micros(1));
+    });
+
+    handle.await?;
     Ok(())
 
 }

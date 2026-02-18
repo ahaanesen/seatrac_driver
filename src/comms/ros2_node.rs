@@ -1,7 +1,8 @@
-use rclrs::*;
+use r2r::std_msgs::msg::String as StringMsg;
+use r2r::{Publisher, QosProfile};
 use std::sync::{Arc, Mutex};
-//use std::{thread, time::Duration};
-use std_msgs::msg::String as StringMsg;
+use futures::stream::StreamExt;
+use tokio::task;
 
 
 /// Queues shared between ROS callbacks and TDMA/modem handler
@@ -12,51 +13,52 @@ pub struct MessageQueues {
 }
 
 
-#[derive(Clone)]
-#[allow(unused)]
 pub struct RosBridge {
-    worker: Worker<Option<String>>,
     publisher: Publisher<StringMsg>,
-    subscription: Subscription<StringMsg>,
     pub queues: MessageQueues,
 }
 
 impl RosBridge {
-        pub fn new(executor: &Executor, node_name: &str) -> Result<Self, RclrsError> {
-            let node = executor.create_node(node_name)?;
-            let worker = node.create_worker(None);
+    pub fn new(arc_node: &Arc<Mutex<r2r::Node>>, node_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let queues = MessageQueues {
+            to_modem: Arc::new(Mutex::new(Vec::new())),
+            from_modem: Arc::new(Mutex::new(Vec::new())),
+        };
 
-            let queues = MessageQueues {
-                to_modem: Arc::new(Mutex::new(Vec::new())),
-                from_modem: Arc::new(Mutex::new(Vec::new())),
-            };
+        // Publisher: outgoing data to /seatrac_x/output
+        let out_topic = format!("/{}/output", node_name);
+        let publisher = arc_node.lock().unwrap()
+            .create_publisher::<StringMsg>(&out_topic, QosProfile::sensor_data())?;
 
-            // Publisher: outgoing data to /seatrac_x/output
-            let out_topic = format!("/{}/output", node_name);
-            let publisher = node.create_publisher::<StringMsg>(out_topic.as_str())?;
+        // Subscription: push incoming ROS data into send queue
+        let in_topic = format!("/{}/input", node_name);
+        let mut sub = arc_node.lock().unwrap()
+            .subscribe::<StringMsg>(&in_topic, QosProfile::sensor_data())?;
 
-            // Subscription: push incoming ROS data into send queue
-            let in_topic = format!("/{}/input", node_name);
-            let to_modem_clone = Arc::clone(&queues.to_modem);
-            let subscription = node.create_subscription::<StringMsg, _>(
-                in_topic.as_str(),
-                move |msg: StringMsg| {
-                    // Handle incoming message from subscription
-                    let mut queue = to_modem_clone.lock().unwrap();
-                    queue.push(msg.data);
-                },
-            )?;
+        // Spawn a tokio task to poll the subscription stream and push into the queue
+        let to_modem_clone = Arc::clone(&queues.to_modem);
+        task::spawn(async move {
+            loop {
+                match sub.next().await {
+                    Some(msg) => {
+                        let mut queue = to_modem_clone.lock().unwrap();
+                        queue.push(msg.data);
+                    }
+                    None => break,
+                }
+            }
+        });
 
-            Ok(Self { worker, publisher, queues, subscription })
-        }
+        Ok(Self { publisher, queues })
+    }
 
 
     /// Publish all messages currently waiting in the receive queue
-    pub fn publish_from_queue(&self) -> Result<(), RclrsError> {
-        let publisher   = self.publisher.clone();
+    pub fn publish_from_queue(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut out_queue = self.queues.from_modem.lock().unwrap();
         for msg in out_queue.drain(..) {
-            publisher.publish(StringMsg { data: msg })?;
+            let ros_msg = StringMsg { data: msg };
+            self.publisher.publish(&ros_msg)?;
         }
         Ok(())
     }
