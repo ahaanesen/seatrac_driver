@@ -1,6 +1,5 @@
-use std::fs;
 use std::error::Error;
-use serde_json;
+
 pub trait ModemAbstraction {
     // These methods made local local (writ_port and read_port) to avoid exposing serialport dependency outside driver
     // fn write_port(&mut self, data: &[u8]) -> Result<(), Box<dyn std::error::Error>>;
@@ -26,26 +25,4 @@ pub trait ModemAbstraction {
     fn receive(&mut self) -> Result<(String, Vec<u8>), Box<dyn Error>>;
 
     fn is_usbl(&self) -> bool;
-}
-
-#[derive(serde::Deserialize)]
-pub struct ModemConfig {
-    pub port_name: String,
-    pub baud_rate: u32,
-
-    pub modem_type: String, // "seatrac"
-    pub usbl: bool, // true if using USBL modem
-
-    pub beacon_id: u8,
-    pub salinity: u16, // in deci-parts-per-thousand
-
-}
-impl ModemConfig {
-    pub fn load_from_file(path: &str) -> Result<Self, Box<dyn Error>> {
-        let contents = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
-        let config: ModemConfig = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse JSON configuration: {}", e))?;
-        Ok(config)
-    }
 }

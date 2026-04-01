@@ -1,0 +1,6 @@
+acoustic_comm_send_topic_name: "/microampere/acoustic/send"
+
+acoustic_comm_receive_topic_name: "/microampere/acoustic/receive"
+usbl_topic_name: "/microampere/sensors/usbl"
+range_topic_name: "/microampere/acoustic/range"
+depth_topic_name: "/microampere/acoustic/rov_depth"

@@ -1,0 +1,4 @@
+tdma_slot_duration_s: 5
+network_participant_count: 2
+agent_id: 1
+msg_propagation_speed: 80

@@ -1,10 +1,13 @@
-use core::task;
 use std::sync::{Arc, Mutex};
-use std::{env, thread::{self, sleep}, time::Duration};
+use std::{thread::{self, sleep}, time::Duration};
+
+use serde_yaml::{self};
 
 mod modem_driver;
 mod seatrac;
 mod comms;
+mod parameters;
+
 use crate::modem_driver::ModemAbstraction;
 use crate::comms::{ack_manager::{AcknowledgmentManager, SentMessage}, 
                     message_types::{self, NewMsg}, 
@@ -19,44 +22,27 @@ static DEFAULT_BAUD_RATE: u32 = 115200;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configurations
-    let mut driver_config = modem_driver::ModemConfig::load_from_file("config_modem.json").unwrap_or_else(|e| {
-        panic!("Failed to load driver configuration: {}", e);
-    });
+    let modem_config_file = std::fs::File::open("config/modem.yaml").expect("Could not open file.");
+    let modem_params_cfg: parameters::ModemParameters =
+        serde_yaml::from_reader(modem_config_file).expect("Could not parse file.");
 
-    let mut comms_config = comms::tdma_utils::CommunicationConfig::load_from_file("config_comms.json").unwrap_or_else(|e| {
-        panic!("Failed to load communication configuration: {}", e);
-    });
+    let comms_config_file = std::fs::File::open("config/comms.yaml").expect("Could not open file.");
+    let comms_params_cfg: parameters::CommsParameters =
+        serde_yaml::from_reader(comms_config_file).expect("Could not parse file.");
 
-
-    // Parse command-line arguments to set node id and optional usbl flag
-/*     let args: Vec<String> = env::args().collect();
-    let agent_id = if args.len() > 1 {
-        args[1].parse::<u8>().unwrap_or_else(|_| {
-            panic!("Invalid node ID argument. Please provide a valid u8 value.");
-        })
-    } else {
-        panic!("Node ID argument is required.");
-    };
-    let usbl = args.iter().any(|arg| arg == "usbl"); // Check for optional "usbl" argument
-
-    // Overwrite loaded configs with command-line args
-    let port_name = format!("/dev/ttyUSB{}", agent_id);
-    driver_config.port_name = port_name;
-    driver_config.beacon_id = agent_id;
-    driver_config.usbl = usbl || false;
-
-    comms_config.agent_id = agent_id; */
-
+    let ros2_config_file = std::fs::File::open("config/ros2_parameters.yaml").expect("Could not open file.");
+    let ros2_params_cfg: parameters::ROS2Parameters =
+        serde_yaml::from_reader(ros2_config_file).expect("Could not parse file.");
 
     // Modem init
     let mut modem;
-    match driver_config.modem_type.as_str() {
+    match modem_params_cfg.modem_type.as_str() {
         "seatrac" => {
             modem = seatrac::seatrac_driver::SeatracModem::new(
-                &driver_config.port_name,
-                driver_config.baud_rate,
-                driver_config.usbl,
-                driver_config.beacon_id,
+                &modem_params_cfg.port_name,
+                modem_params_cfg.baud_rate,
+                modem_params_cfg.usbl,
+                modem_params_cfg.beacon_id,
             )
             .unwrap_or_else(|e| {
                 panic!("Failed to open modem: {}", e);
@@ -64,26 +50,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // Can add other modem types here, e.g. "luma100"
         // NB. might want to switch from modem_type being string to enum, but not sure how well it works in the config file
-        _ => panic!("Unsupported modem type: {}", driver_config.modem_type),
+        _ => panic!("Unsupported modem type: {}", modem_params_cfg.modem_type),
     }
-    modem.configure(driver_config.usbl, DEFAULT_BAUD_RATE, driver_config.beacon_id, driver_config.salinity).unwrap();
+    modem.configure(modem_params_cfg.usbl, DEFAULT_BAUD_RATE, modem_params_cfg.beacon_id, modem_params_cfg.salinity).unwrap();
 
 
     // ROS2 init
-    let node_name = "seatrac_".to_string() + &comms_config.agent_id.to_string(); //most important the comms and ros2 node have the same id
+    let node_name = "seatrac_".to_string() + &comms_params_cfg.agent_id.to_string(); //most important the comms and ros2 node have the same id
     let ctx = r2r::Context::create()?;
-    let node = r2r::Node::create(ctx, &node_name, "")?;
-    let arc_node = Arc::new(Mutex::new(node));
+    let mut node = r2r::Node::create(ctx, &node_name, "")?;
 
+    let acoustic_send_subscriber = node
+        .subscribe::<r2r::blueboat_interfaces::msg::AcousticCommSend>(
+            &ros2_params_cfg.acoustic_comm_send_topic_name, r2r::QosProfile::default()
+    )?;
+
+    let acoustic_receive_publisher = node
+        .create_publisher::<r2r::blueboat_interfaces::msg::AcousticCommReceive>(
+            &ros2_params_cfg.acoustic_comm_receive_topic_name, r2r::QosProfile::default()
+    )?;
+
+    if modem.is_usbl() {
+        let usbl_publisher = node
+            .create_publisher::<r2r::blueboat_interfaces::msg::USBLMeasurement>(
+                &ros2_params_cfg.usbl_topic_name, r2r::QosProfile::default()
+        )?;
+    }
+
+    let arc_node = Arc::new(Mutex::new(node));
     let bridge_node = ros2_node::RosBridge::new(&arc_node, &node_name)?;
     let queues = bridge_node.queues.clone();
 
 
     // TDMA scheduler init
     let tdma_scheduler = comms::tdma_scheduler::TdmaScheduler::new(
-        comms_config.network_participant_count,
-        comms_config.tdma_slot_duration_s,
-        comms_config.agent_id,
+        comms_params_cfg.network_participant_count,
+        comms_params_cfg.tdma_slot_duration_s,
+        comms_params_cfg.agent_id,
     );
 
 
@@ -101,13 +104,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start TDMA scheduler thread
     thread::spawn(move || {
         let mut ack_handler = AcknowledgmentManager::new();
-        println!("Starting TDMA scheduler for node ID {}", comms_config.agent_id);
+        println!("Starting TDMA scheduler for node ID {}", comms_params_cfg.agent_id);
         loop {
 
             if tdma_scheduler.is_my_slot() {
-                println!("\n \n Node {}: It's my slot to send! ", comms_config.agent_id);
+                println!("\n \n Node {}: It's my slot to send! ", comms_params_cfg.agent_id);
                 let acks_to_send = ack_handler.prepare_round();
-                protocols::broadcast_status_msg(&comms_config, &mut modem, initial_time as u64, &mut ack_handler, &acks_to_send);
+                protocols::broadcast_status_msg(&comms_params_cfg, &mut modem, initial_time as u64, &mut ack_handler, &acks_to_send);
 
                 while tdma_scheduler.is_my_slot() {
                     // Send queued messages from ROS
@@ -117,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         sleep(Duration::from_millis(ack_handler.wait_time));
 
                         println!("Message from ROS2 to send: {}", msg);
-                        if tdma_utils::get_slot_after_propag(&comms_config, ack_handler.wait_time) != tdma_scheduler.assigned_slot {
+                        if tdma_utils::get_slot_after_propag(&comms_params_cfg, ack_handler.wait_time) != tdma_scheduler.assigned_slot {
                             println!("Not enough time to send new message, skipping.");
                             break;
                         }
@@ -129,20 +132,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ack_handler.add_message(ack_handler.message_index, SentMessage::new(new_msg.position, new_msg.t));
                         println!("Prepared new message with index {}", ack_handler.message_index);
 
-                        ack_handler.wait_time =protocols::send_message(&comms_config, &mut modem, ack_handler.message_index, destination_id, &new_msg, &acks_to_send);
+                        ack_handler.wait_time =protocols::send_message(&comms_params_cfg, &mut modem, ack_handler.message_index, destination_id, &new_msg, &acks_to_send);
                         println!("Set wait time to {} milliseconds", ack_handler.wait_time);
                     }
 
                     // Resend logic
-                    let next_slot = tdma_utils::get_slot_after_propag(&comms_config, ack_handler.wait_time);
+                    let next_slot = tdma_utils::get_slot_after_propag(&comms_params_cfg, ack_handler.wait_time);
                     if  !ack_handler.has_unacked_messages() && next_slot == tdma_scheduler.assigned_slot {
-                        protocols::resend_messages(&comms_config, &mut modem, &mut ack_handler, &acks_to_send);
+                        protocols::resend_messages(&comms_params_cfg, &mut modem, &mut ack_handler, &acks_to_send);
                     }
 
                 }
 
             } else { // Receiving slot
-                println!("Node {}: Listening for messages...", comms_config.agent_id);
+                println!("Node {}: Listening for messages...", comms_params_cfg.agent_id);
 
                 while !tdma_scheduler.is_my_slot() {
                     match protocols::receive_message(&mut modem) { 
@@ -162,14 +165,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
 
                         }
-                        Err(_e) => { // TODO: return timeout instead of error
+                        Err(_e) => {
                             //eprintln!("Error receiving message: {}", e);
                             continue;
                         }
                     }
                 }
                 for msg in &ack_handler.listened_msg.clone() {
-                    ack_handler.handle_acknowledgments(&msg, comms_config.network_participant_count);
+                    ack_handler.handle_acknowledgments(&msg, comms_params_cfg.network_participant_count);
                 }
 
             }

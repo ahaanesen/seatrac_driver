@@ -1,5 +1,5 @@
 use r2r::std_msgs::msg::String as StringMsg;
-use r2r::{Publisher, QosProfile};
+use r2r::{Publisher, QosProfile, blueboat_interfaces};
 use std::sync::{Arc, Mutex};
 use futures::stream::StreamExt;
 use tokio::task;
@@ -25,12 +25,15 @@ impl RosBridge {
             from_modem: Arc::new(Mutex::new(Vec::new())),
         };
 
+        // TODO: remove publisher and subscriber creation from here an move to main, 
+        // just pass the node and topic names in and create them in main, then pass the publisher and subscriber into the bridge struct, 
+        // cleaner separation of concerns and more flexible if we want to have multiple publishers/subscribers in the future
         // Publisher: outgoing data to /seatrac_x/output
         let out_topic = format!("/{}/output", node_name);
         let publisher = arc_node.lock().unwrap()
             .create_publisher::<StringMsg>(&out_topic, QosProfile::sensor_data())?;
 
-        // Subscription: push incoming ROS data into send queue
+        // Subscription: push incoming ROS data from topic /seatrac_x/inputinto send queue
         let in_topic = format!("/{}/input", node_name);
         let mut sub = arc_node.lock().unwrap()
             .subscribe::<StringMsg>(&in_topic, QosProfile::sensor_data())?;

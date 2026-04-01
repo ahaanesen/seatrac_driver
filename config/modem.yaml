@@ -1,0 +1,8 @@
+port_name: "/dev/ttyUSB0"
+baud_rate: 115200
+
+modem_type: "seatrac"
+usbl: true
+
+beacon_id: 1
+salinity: 0

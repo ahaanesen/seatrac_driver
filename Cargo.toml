@@ -8,11 +8,14 @@ bitflags = "2.9.4"
 hex = "0.4.3"
 serialport = "4.0"
 num_enum = "0.7"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+
 log = "0.4.28"
 binrw = "0.15.0"
 thread = "0.0.1"
 r2r = "0.9"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+
+serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
+nalgebra = {version ="0.34", features = ["serde-serialize"]}

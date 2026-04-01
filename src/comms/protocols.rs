@@ -1,12 +1,12 @@
 use std::{mem, thread::sleep, time::{Duration}};
-use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::{self, CommunicationConfig}}, 
+use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::{self}}, 
             modem_driver::ModemAbstraction, 
             seatrac::{self, structs}};
-
+use crate::parameters;
 
 #[allow(dead_code)]
 /// Broadcasts a status message with the nodes position
-pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, _initial_time: u64, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
+pub fn broadcast_status_msg(comms_config: &parameters::CommsParameters, modem: &mut dyn ModemAbstraction, _initial_time: u64, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
     //let t_send = tdma_utils::get_total_seconds() - initial_time;
     let t_send = tdma_utils::get_total_seconds();
 
@@ -25,25 +25,25 @@ pub fn broadcast_status_msg(comms_config: &CommunicationConfig, modem: &mut dyn 
         println!("Broadcasting status message: {:?}", dccl::decode_output(&dccl_message));
         if let Ok(modem_command) = modem.send(0, &dccl_message) {
             // println!("Modem command to send: {:?}", String::from_utf8(modem_command.clone()).unwrap_or("Non-UTF8 data".to_string()));
-            ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed; // TODO: make func?
+            ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propagation_speed; // TODO: make func?
         }
     }
     
 }
 
 // / Sends a message to the specified destination via the modem
-pub fn send_message(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, msg_idx: i32, destination_id: u8, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
+pub fn send_message(comms_config: &parameters::CommsParameters, modem: &mut dyn ModemAbstraction, msg_idx: i32, destination_id: u8, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
     let dccl_message = msg.to_bytes(comms_config.agent_id, msg_idx, acks_to_send.clone());
 
     if let Ok(modem_command) = modem.send(destination_id, &dccl_message) {
-        return mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed // TODO: make func?
+        return mem::size_of_val(&modem_command) as u64 * comms_config.msg_propagation_speed // TODO: make func?
     }
     0
 }
 
 
 /// Resends all messages in the SentMsgManager that have not been acknowledged
-pub fn resend_messages(comms_config: &CommunicationConfig, modem: &mut dyn ModemAbstraction, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
+pub fn resend_messages(comms_config: &parameters::CommsParameters, modem: &mut dyn ModemAbstraction, ack_handler: &mut AcknowledgmentManager, slot_acks: &Vec<i32>) {
     for (index, mut message) in ack_handler.list_messages() {
         if index != ack_handler.message_index { // Don't resend the just sent message
             // Wait before resending the message to not clog the channel
@@ -55,7 +55,7 @@ pub fn resend_messages(comms_config: &CommunicationConfig, modem: &mut dyn Modem
             let dccl_message = message.to_bytes(comms_config.agent_id, index, slot_acks.clone());
 
             if let Ok(modem_command) = modem.send(0, &dccl_message) {
-            ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propgagation_speed; // TODO: make func?
+            ack_handler.wait_time = mem::size_of_val(&modem_command) as u64 * comms_config.msg_propagation_speed; // TODO: make func?
         }
             // TODO: if still in slot after waittime, send message, else not enough time to resend
 
