@@ -1,5 +1,5 @@
 use std::{mem, thread::sleep, time::{Duration}};
-use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, message_types::{self, NewMsg, PositionalCoordinates}, tdma_utils::{self}}, 
+use crate::{comms::{ack_manager::{SentMessage, AcknowledgmentManager}, dccl, message_types::{self, MsgPayload, PositionalCoordinates}, tdma_utils::{self}}, 
             modem_driver::ModemAbstraction, 
             seatrac::{self, structs}};
 use crate::parameters;
@@ -13,8 +13,8 @@ pub fn broadcast_status_msg(comms_config: &parameters::CommsParameters, modem: &
     let pos = modem.get_position(t_send).unwrap(); // Get the node's position
     let pos = PositionalCoordinates::new(pos[0], pos[1], pos[2]);
 
-    let new_msg = NewMsg::new(pos, t_send);
-    ack_handler.queue_new_msg.push_back(new_msg);
+    let payload = MsgPayload::new(pos, t_send);
+    ack_handler.queue_new_msg.push_back(payload);
 
     if !ack_handler.queue_new_msg.is_empty() {
         ack_handler.message_index += 1;
@@ -32,7 +32,7 @@ pub fn broadcast_status_msg(comms_config: &parameters::CommsParameters, modem: &
 }
 
 // / Sends a message to the specified destination via the modem
-pub fn send_message(comms_config: &parameters::CommsParameters, modem: &mut dyn ModemAbstraction, msg_idx: i32, destination_id: u8, msg: &NewMsg, acks_to_send: &Vec<i32>) -> u64 {
+pub fn send_message(comms_config: &parameters::CommsParameters, modem: &mut dyn ModemAbstraction, msg_idx: i32, destination_id: u8, msg: &MsgPayload, acks_to_send: &Vec<i32>) -> u64 {
     let dccl_message = msg.to_bytes(comms_config.agent_id, msg_idx, acks_to_send.clone());
 
     if let Ok(modem_command) = modem.send(destination_id, &dccl_message) {

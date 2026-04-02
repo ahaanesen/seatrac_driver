@@ -1,23 +1,27 @@
 // connected to acknowledgment manager
 use crate::{comms::dccl::encode_input};
 
+
+/// The acoustically sent message payload
+/// Currently only contains position and time, but can be extended with other fields as needed
+/// The thing that gets DCCL encoded and sent via the modem
 #[derive(Debug, Clone, PartialEq)]
-pub struct NewMsg {
+pub struct MsgPayload {
     pub position: PositionalCoordinates,
     pub t: u64
 }
 
-impl NewMsg{
+impl MsgPayload{
     pub fn new(fields: PositionalCoordinates, t: u64) -> Self{
-        NewMsg{
+        MsgPayload{
             position: fields,
             t
         }
     }
 
-    /// Convert the NewMsg struct to bytes for transmission with dccl encoding
+    /// Convert the MsgPayload struct to bytes for transmission with dccl encoding
     pub fn to_bytes(&self, node_id: u8, message_index: i32, acks: Vec<i32>) -> Vec<u8> {
-        // Convert the NewMsg struct to bytes for transmission
+        // Convert the MsgPayload struct to bytes for transmission
         // Implement serialization logic here
             let position_string = self.position.to_string();
             let status_string = format!("node_id:{} msg_idx:{} {} t:{} ack:{:?}", 
@@ -34,56 +38,56 @@ impl NewMsg{
     }
 }
 
-pub fn parse_new_msg(data: &str) -> Result<(u8, PositionalCoordinates), Box<dyn std::error::Error>> {
-    let tokens: Vec<&str> = data.split_whitespace().collect();
-    let mut destination_id: u8 = 0;
-    let mut x: u8 = 0;
-    let mut y: u8 = 0;
-    let mut z: u8 = 0;
-    // let mut t: u64 = 0;
+// pub fn parse_new_msg(data: &str) -> Result<(u8, PositionalCoordinates), Box<dyn std::error::Error>> {
+//     let tokens: Vec<&str> = data.split_whitespace().collect();
+//     let mut destination_id: u8 = 0;
+//     let mut x: u8 = 0;
+//     let mut y: u8 = 0;
+//     let mut z: u8 = 0;
+//     // let mut t: u64 = 0;
 
-    for token in tokens {
-        if let Some(colon_pos) = token.find(':') {
-            let key = token[..colon_pos].trim();
-            let val = token[colon_pos + 1..].trim();
+//     for token in tokens {
+//         if let Some(colon_pos) = token.find(':') {
+//             let key = token[..colon_pos].trim();
+//             let val = token[colon_pos + 1..].trim();
 
-            match key {
-                "destination_id" => destination_id = val.parse()?,
-                "x" => x = val.parse()?,
-                "y" => y = val.parse()?,
-                "z" => z = val.parse()?,
-               // "t" => t = val.parse()?,
-                _ => {}
-            }
-        }
-    }
+//             match key {
+//                 "destination_id" => destination_id = val.parse()?,
+//                 "x" => x = val.parse()?,
+//                 "y" => y = val.parse()?,
+//                 "z" => z = val.parse()?,
+//                // "t" => t = val.parse()?,
+//                 _ => {}
+//             }
+//         }
+//     }
 
-    let position = PositionalCoordinates::new(x, y, z);
-    // let new_msg = NewMsg::new(position, t);
-    Ok((destination_id, position))
-}
+//     let position = PositionalCoordinates::new(x, y, z);
+//     // let new_msg = MsgPayload::new(position, t);
+//     Ok((destination_id, position))
+// }
 
-#[test]
-fn parse_new_msg_basic() {
-    let data = "destination_id:1 x:10 y:20 z:30";
-    let (destination_id, position) = parse_new_msg(data).unwrap();
+// #[test]
+// fn parse_new_msg_basic() {
+//     let data = "destination_id:1 x:10 y:20 z:30";
+//     let (destination_id, position) = parse_new_msg(data).unwrap();
 
-    assert_eq!(destination_id, 1u8);
-    assert_eq!(position, PositionalCoordinates::new(10, 20, 30));
-}
+//     assert_eq!(destination_id, 1u8);
+//     assert_eq!(position, PositionalCoordinates::new(10, 20, 30));
+// }
 
 /// FieldMsg struct to hold coordinates
 /// Represents the positional coordinates of the node
 /// fields format: vec![x as u8, y as u8, z as u8]
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PositionalCoordinates {
-    pub x: u8,
-    pub y: u8,
-    pub z: u8,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl PositionalCoordinates {
-    pub fn new(x: u8, y: u8, z: u8) -> Self {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
         PositionalCoordinates { x, y, z }
     }
 
@@ -129,7 +133,7 @@ impl ReceivedMsg {
         ReceivedMsg {
             node_id: 0,
             message_index: 0,
-            position: PositionalCoordinates::new(0, 0, 0),
+            position: PositionalCoordinates::new(0.0, 0.0, 0.0),
             t_sent: 0,
             t_received: 0,
             acks: vec![],
@@ -146,9 +150,9 @@ impl ReceivedMsg {
 
         let mut node_id: u8 = 0;
         let mut message_index: i32 = 0;
-        let mut x: u8 = 0;
-        let mut y: u8 = 0;
-        let mut z: u8 = 0;
+        let mut x: f64 = 0.0;
+        let mut y: f64 = 0.0;
+        let mut z: f64 = 0.0;
         let mut t_sent: u64 = 0;
         let mut acks: Vec<i32> = vec![];
 
@@ -297,7 +301,7 @@ fn from_string_parses_with_acks() {
     let expected = ReceivedMsg {
         node_id: 1u8,
         message_index: 42i32,
-        position: PositionalCoordinates::new(10, 20, 30),
+        position: PositionalCoordinates::new(10.0, 20.0, 30.0),
         t_sent: 123456u64,
         t_received,
         acks: vec![1, 2, 3],
@@ -317,7 +321,7 @@ fn from_string_parses_empty_ack_and_ignores_bad_parts() {
     let expected = ReceivedMsg {
         node_id: 2u8,
         message_index: 7i32,
-        position: PositionalCoordinates::new(255, 0, 5),
+        position: PositionalCoordinates::new(255.0, 0.0, 5.0),
         t_sent: 42u64,
         t_received,
         acks: vec![],
@@ -335,7 +339,7 @@ fn from_string_parses_spaced_input() {
     let expected = ReceivedMsg {
         node_id: 0u8,
         message_index: 1i32,
-        position: PositionalCoordinates::new(255, 4, 0),
+        position: PositionalCoordinates::new(255.0, 4.0, 0.0),
         t_sent: 0u64,
         t_received,
         acks: vec![],

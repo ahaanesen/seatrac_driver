@@ -13,7 +13,7 @@ pub trait ModemAbstraction {
     ///   345 represents 34.5 ppt)
     fn configure(&mut self, usbl: bool, baud_rate: u32, beacon_id: u8, salinity: u16) -> Result<(), Box<dyn std::error::Error>>;
     
-    fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>>;
+    fn get_position(&mut self, t: u64) -> Result<Vec<f64>, Box<dyn Error>>;
 
 
     /// Given a destination ID and data payload, sends the data via the modem.

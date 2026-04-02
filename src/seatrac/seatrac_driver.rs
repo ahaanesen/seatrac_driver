@@ -174,20 +174,21 @@ impl ModemAbstraction for SeatracModem {
         Ok(())
     }
 
-    fn get_position(&mut self, t: u64) -> Result<Vec<u8>, Box<dyn Error>> {
-        // Helper to clamp floats into u8 range safely
-        let clamp_to_u8 = |v: f64| -> u8 {
-            if v.is_nan() {
-                return 0;
-            }
-            if v <= 0.0 {
-                0
-            } else if v >= 255.0 {
-                255
-            } else {
-                v as u8
-            }
-        };
+    fn get_position(&mut self, t: u64) -> Result<Vec<f64>, Box<dyn Error>> {
+        
+        // // Helper to clamp floats into u8 range safely
+        // let clamp_to_u8 = |v: f64| -> u8 {
+        //     if v.is_nan() {
+        //         return 0;
+        //     }
+        //     if v <= 0.0 {
+        //         0
+        //     } else if v >= 255.0 {
+        //         255
+        //     } else {
+        //         v as u8
+        //     }
+        // };
 
         // println!("Getting position for node ID {}", self.node_id);
         // Create a command with the STATUS_BITS_T::ENVIRONMENT flag set
@@ -200,8 +201,9 @@ impl ModemAbstraction for SeatracModem {
         let status = STATUS_RESPONSE::from_bytes(&response_payload)?;
 
         let z: f64;
-        if let Some(env_depth) = status.env_depth {
-            z = env_depth as f64;
+        if let Some(env_depth) = status.env_depth { // Use actual depth from status message if available
+            let deci_depth = env_depth as f64; 
+            z = deci_depth * 0.1; // Convert from deci-meters to meters
         } else {
             z = 4.0 + 0.5 * (0.1 * t as f64).sin(); // Default value if env_depth is not available
         }
@@ -211,32 +213,35 @@ impl ModemAbstraction for SeatracModem {
             0 => {
                 let x = 2.0 * t as f64;
                 let y = 5.0 * (0.1 * t as f64).sin();
-                let x_u8 = clamp_to_u8(x);
-                let y_u8 = clamp_to_u8(y);
-                let z_u8 = clamp_to_u8(z);
-                Ok(vec![x_u8, y_u8, z_u8])
+                // let x_u8 = clamp_to_u8(x);
+                // let y_u8 = clamp_to_u8(y);
+                // let z_u8 = clamp_to_u8(z);
+                // Ok(vec![x_u8, y_u8, z_u8])
+                Ok(vec![x, y, z])
             }
             1 => {
                 let x = 2.0 * t as f64; 
                 let y = 20.0 - 4.0 * (0.07 * t as f64).sin();
-                let x_u8 = clamp_to_u8(x);
-                let y_u8 = clamp_to_u8(y);
-                let z_u8 = clamp_to_u8(z);
-                Ok(vec![x_u8, y_u8, z_u8])
+                // let x_u8 = clamp_to_u8(x);
+                // let y_u8 = clamp_to_u8(y);
+                // let z_u8 = clamp_to_u8(z);
+                // Ok(vec![x_u8, y_u8, z_u8])
+                Ok(vec![x, y, z])
             }
             2 => {
                 let x = 15.0 * (0.05 * t as f64).cos();
                 let y = 15.0 * (0.05 * t as f64).sin();
-                let x_u8 = clamp_to_u8(x);
-                let y_u8 = clamp_to_u8(y);
-                let z_u8 = clamp_to_u8(z);
-                Ok(vec![x_u8, y_u8, z_u8])
+                // let x_u8 = clamp_to_u8(x);
+                // let y_u8 = clamp_to_u8(y);
+                // let z_u8 = clamp_to_u8(z);
+                // Ok(vec![x_u8, y_u8, z_u8])
+                Ok(vec![x, y, z])
             }
             _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Error: get_position received an invalid node_id"))), // Handle invalid node IDs
         }
     }
 
-    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<(Vec<u8>), Box<dyn Error>> {
+    fn send(&mut self, destination_id: u8, data: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let dat_msg = DAT_SEND::new(destination_id, data.to_vec());
         // println!("Preparing DAT_SEND message to node ID {}: {:?}", destination_id, dat_msg);
         // println!("{:?}", dat_msg);

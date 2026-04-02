@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use crate::comms::{dccl::encode_input, message_types::{self, NewMsg, PositionalCoordinates, ReceivedMsg}};
+use crate::comms::{dccl::encode_input, message_types::{self, MsgPayload, PositionalCoordinates, ReceivedMsg}};
 
 /// Struct to hold acknowledgment information for received messages
 pub struct MsgReceivedAck {
@@ -93,7 +93,7 @@ pub struct AcknowledgmentManager {
     messages: HashMap<i32, SentMessage>, // Maps message ID to SentMessage
     pub message_index: i32, // TODO: change to something better than i32
     received_acks: Vec<MsgReceivedAck>,
-    pub queue_new_msg: VecDeque<NewMsg>,
+    pub queue_new_msg: VecDeque<MsgPayload>,
     pub listened_msg: Vec<ReceivedMsg>,
     pub wait_time: u64,
 }

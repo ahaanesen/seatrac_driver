@@ -11,7 +11,7 @@
 // enums declared in `seatrac_enums.rs` which intentionally keep those spec names
 // so it's straightforward to cross-reference the firmware documentation.
 
-#![allow(non_camel_case_types)]
+#![allow(non_camel_case_types, unused_mut)]
 
 
 /* Structures (sometimes called Records or Structs) are declarations defining complex data types of physically grouped
@@ -67,7 +67,6 @@ impl ACOFIX_T {
         let src_id = data[offset]; offset += 1;
         let flags = ACOFIX_FLAGS::from_bits_truncate(data[offset]); offset += 1;
         let msg_type = AMSGTYPE_E::from_u8(data[offset]).ok_or("Invalid AMSGTYPE_E value")?; offset += 1;
-
         // helper closures that validate bounds before reading
         let mut read_u16 = |buf: &[u8], off: &mut usize| -> Result<u16, Box<dyn std::error::Error>> {
             if *off + 2 > buf.len() { return Err("Buffer too short while reading u16".into()); }
@@ -474,7 +473,7 @@ impl DAT_RECEIVE {
         let dat_receive = DAT_RECEIVE {
             // msg_id: CID_E::CID_DAT_RECEIVE,
             aco_fix,
-            ack_flag: u8_to_bool(received[(packet_len_idx-1)]),
+            ack_flag: u8_to_bool(received[packet_len_idx-1]),
             packet_len: pac_len,
             packet_data: received[(packet_len_idx+1)..((packet_len_idx+1) + n_us)].to_vec(),
             local_flag: u8_to_bool(received[(packet_len_idx+1) + n_us ]),
